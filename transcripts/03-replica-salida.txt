@@ -1,0 +1,17 @@
+Escribí `src/replica.ts` y `src/diff.ts`. El comparador da 356/356 líneas y 23/23 secuencias contra la réplica local, incluidos los 20 ejemplos oficiales. El servidor ya está detenido y no hice commit.
+
+Corrí todo con `TEAM_TOKEN=tok` en la línea de comandos, sin leer `.env` ni llamar al original. El comparador reproduce el log completo (con los resets de cada secuencia) más los 20 ejemplos oficiales. Para correrlo: `node --env-file=.env src/diff.ts [url]`.
+
+En `replica.ts` las validaciones son una tabla ordenada de pasos `{código, status, mensaje, chequeo}`. Cada comando agrega sus propios pasos después. El orden es E100, E102, E103, E104, E201, E202, E301, E302, y luego los de cada comando.
+
+Dos cosas que conviene saber:
+
+- **Hallazgo en el log:** `PING;65` (id 30) responde 200, aunque su control correcto es 64. En los demás comandos, 1 de diferencia ya da E202. Por eso en la réplica PING no valida el valor del control (marcado `// SUPUESTO:`). No sé si es solo PING o todo comando sin argumentos, ni qué pasa con `PING;XX`. Con 3 o 4 pruebas contra el original se resuelve.
+- **El shell truncó mi primer intento al escribir el archivo.** Lo detecté y lo completé con la herramienta de edición. El archivo final está completo.
+
+Los supuestos que quedan, marcados en el código, son dudas reales porque los datos no los muestran:
+- **Límite de transferencia:** por operación e inclusivo, 100000. El corte exacto entre 100001 y 119999 no está medido.
+- **Monto máximo:** hasta 9 dígitos. Solo sé que 500000 pasa y 999999999999 falla.
+- **Orden entre errores de un mismo comando:** E303 antes que E401, E304 antes que E401, y E506 antes que E507.
+- **Sugerencias de comando desconocido:** solo `AYUDA` y `HELP`, que son las que hay en el log.
+- **ANULA:** revierte el efecto aunque deje saldo negativo.
