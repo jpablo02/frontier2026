@@ -18,7 +18,9 @@ const ejemplos = readFileSync(new URL("../frontier-reto-2/pruebas/ejemplos.jsonl
 const pasos: Paso[] = [
   ...ejemplos.map((e) => ({ nombre: `ejemplo-${e.n}`, opts: { body: e.request } })),
   { nombre: "deposito-10-digitos", opts: { body: { m: firmar("DEPOSITO;AC-0001;9999999999") } } },
-  { nombre: "transfer-limite+1", opts: { body: { m: firmar("TRANSFER;AC-0001;AC-0002;100001") } } },
+  // v2 (16:01): el límite bajó a 50000. Se vigilan los dos lados de la frontera nueva.
+  { nombre: "transfer-limite", opts: { body: { m: firmar("TRANSFER;AC-0001;AC-0002;50000") } } },
+  { nombre: "transfer-limite+1", opts: { body: { m: firmar("TRANSFER;AC-0001;AC-0002;50001") } } },
   { nombre: "comando-desconocido", opts: { body: { m: firmar("AYUDA;AC-0001") } } },
   { nombre: "ping-control-malo", opts: { body: { m: "PING;65" } } },
   { nombre: "ruta-inexistente", opts: { method: "GET", path: "/noexiste" } },

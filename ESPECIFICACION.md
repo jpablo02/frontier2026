@@ -1,6 +1,9 @@
 # Especificación del servicio "caja negra" (borrador)
 
-Reto 2 · 10 oct 2026 · Versión del original observada entre las 12:25 y las 15:00 (hora de Bogotá).
+Reto 2 · 10 oct 2026 · Dos versiones observadas (hora de Bogotá):
+**v1** entre las 12:25 y las 15:51, y **v2** desde algún momento entre las 15:51 y las 16:01,
+vigente al cierre. Las filas marcadas "(v1)" describen el comportamiento anterior y se conservan
+como evidencia; **la versión vigente es la v2**. Los cambios están en la sección 6.
 
 **Cómo leer este documento.** Cada fila cita los `id` de `experimentos.jsonl` que la prueban (un rango
 `a-b` incluye todas las líneas intermedias). Confianza:
@@ -89,7 +92,7 @@ cantidad fija de argumentos. Si no coincide: `400` `{"error":"E302","mensaje":"a
 |---|---|---|
 | `PING` | 0 | `200` `{"pong":true}` |
 | `ALTA` | 1: nombre | `201` `{"cuentaId":"AC-0001"}` |
-| `CONSULTA` | 1: cuenta | `200` `{"cuenta_id":"AC-0001","saldo":0}` |
+| `CONSULTA` | 1: cuenta | v2: `200` `{"cuenta_id":"AC-0001","saldo":"0.00"}` · v1: `"saldo":0` |
 | `DEPOSITO` | 2: cuenta, monto | `200` `{"status":"recieved","operacionId":"OP-0001"}` |
 | `TRANSFER` | 3: origen, destino, monto | `200` `{"status":"recieved","operacionId":"OP-0002"}` |
 | `ANULA` | 1: operación | `200` `{"ok":true,"anulada":"OP-0003"}` |
@@ -121,7 +124,8 @@ cantidad fija de argumentos. Si no coincide: `400` `{"error":"E302","mensaje":"a
 
 | ID | Comportamiento | Evidencia | Confianza |
 |---|---|---|---|
-| CMD-CON-01 | `CONSULTA;<cuenta>;<c>` → `200` `{"cuenta_id":"<cuenta>","saldo":<entero>}`. Ojo: aquí la clave es `cuenta_id`; en ALTA es `cuentaId` | 6, 9, 20, 485, 488 | confirmado |
+| CMD-CON-01 | **(v2, vigente)** `CONSULTA;<cuenta>;<c>` → `200` `{"cuenta_id":"<cuenta>","saldo":"<string>"}`. El saldo es un **string con 2 decimales**, con el valor interno dividido entre 100: 0 → `"0.00"`, 40000 → `"400.00"`, 12345 → `"123.45"`, -800 → `"-8.00"`. Ojo: aquí la clave es `cuenta_id`; en ALTA es `cuentaId` | 1825, 1828, 1832, 2237, 2377, 2381 | confirmado |
+| CMD-CON-01-v1 | **(v1, hasta 15:51)** El saldo era un **entero**: `{"cuenta_id":"AC-0001","saldo":0}` | 6, 9, 20, 485, 488 | confirmado |
 | CMD-CON-02 | Cuenta inexistente → `404` `{"error":"E401","mensaje":"cuenta inexistente"}` | 16, 27, 495 | confirmado |
 | CMD-CON-03 | El id de cuenta tiene que ser exacto: `ac-0001`, `AC-1` y `AC-00001` dan E401 | 471, 475, 479 | confirmado |
 | CMD-CON-04 | Sin argumento (`CONSULTA;11`) → `400` E302 | 329 | probable |
@@ -143,8 +147,10 @@ cantidad fija de argumentos. Si no coincide: `400` `{"error":"E302","mensaje":"a
 | ID | Comportamiento | Evidencia | Confianza |
 |---|---|---|---|
 | CMD-TRF-01 | `TRANSFER;<origen>;<destino>;<monto>;<c>` resta del origen y suma al destino → `200` `{"status":"recieved","operacionId":"OP-NNNN"}` | 8, 9, 11, 12, 487, 488, 490, 491 | confirmado |
-| CMD-TRF-02 | Límite por operación de 100000, inclusivo: 100000 pasa; 100001, 105000, 110000, 119999 y 120000 dan `422` `{"error":"E506","mensaje":"límite excedido"}` | 11, 366, 490, 340, 345, 350, 355, 10, 419, 489, 502 | confirmado |
-| CMD-TRF-03 | El límite no es acumulado: dos transferencias de 60000, o una de 100000 y otra de 1, pasan | 360, 361, 366, 367 | confirmado |
+| CMD-TRF-02 | **(v2, vigente)** Límite por operación de **50000**, inclusivo: 49999 y 50000 pasan; 50001, 55000 y 59999 dan `422` `{"error":"E506","mensaje":"límite excedido"}` | 2347, 2352, 2357, 2362, 2367 | confirmado |
+| CMD-TRF-02-v1 | **(v1, hasta 15:51)** El límite era 100000, inclusivo: 100000 pasaba; 100001, 105000, 110000, 119999 y 120000 daban E506 | 11, 366, 490, 340, 345, 350, 355, 10, 419, 489, 502 | confirmado |
+| CMD-TRF-03 | **(v2, vigente)** El límite no es acumulado: dos transferencias de 30000 seguidas pasan | 2372, 2373 | confirmado |
+| CMD-TRF-03-v1 | **(v1, hasta 15:51)** Tampoco era acumulado: dos de 60000, o una de 100000 y otra de 1, pasaban | 360, 361, 366, 367 | confirmado |
 | CMD-TRF-04 | Origen igual a destino → `400` `{"error":"E304","mensaje":"origen y destino iguales"}` | 234, 411, 431 | confirmado |
 | CMD-TRF-05 | Origen o destino inexistente → `404` `{"error":"E401","mensaje":"cuenta inexistente"}` | 235, 236, 423, 427 | confirmado |
 | CMD-TRF-06 | Saldo del origen menor que el monto → `422` `{"error":"E507","mensaje":"saldo insuficiente"}` | 17, 380, 496 | confirmado |
@@ -159,7 +165,7 @@ cantidad fija de argumentos. Si no coincide: `400` `{"error":"E302","mensaje":"a
 | CMD-ANU-01 | `ANULA;<OP-NNNN>;<c>` anula una operación → `200` `{"ok":true,"anulada":"<OP-NNNN>"}` | 14, 250, 438, 493 | confirmado |
 | CMD-ANU-02 | Anular una transferencia devuelve el monto al origen y lo quita del destino | 14, 20, 438, 439, 440, 493, 499 | confirmado |
 | CMD-ANU-03 | Anular un depósito resta el monto de la cuenta | 446, 447, 452, 453, 466, 467 | confirmado |
-| CMD-ANU-04 | La reversión se aplica aunque deje un saldo negativo (`-800`, `-1000`) | 440, 447 | confirmado |
+| CMD-ANU-04 | La reversión se aplica aunque deje un saldo negativo. En v1 se veía como `-800` y `-1000`; en v2, como `"-8.00"` y `"-10.00"` | 440, 447, 2237, 2244 | confirmado |
 | CMD-ANU-05 | Una operación ya anulada → `200` `{"ok":false,"motivo":"ya anulada"}` (no es un error HTTP) | 15, 465, 494 | confirmado |
 | CMD-ANU-06 | Operación inexistente (`OP-0009`, `XX-0001`, `AC-0001`) → `404` `{"error":"E402","mensaje":"operación inexistente"}` | 248, 251, 334 | confirmado |
 | CMD-ANU-07 | El id de operación distingue mayúsculas: `op-0001` da E402 | 458 | probable |
@@ -186,7 +192,7 @@ cantidad fija de argumentos. Si no coincide: `400` `{"error":"E302","mensaje":"a
 | MEM-05 | `ANULA` no consume número de operación | 389, 390, 463, 464 | confirmado |
 | MEM-06 | Los saldos se acumulan entre requests: CONSULTA refleja depósitos, transferencias y anulaciones anteriores | 9, 12, 20, 439, 440, 467 | confirmado |
 | MEM-07 | La marca "anulada" se recuerda: la segunda anulación da `ok:false`, aunque haya operaciones nuevas en medio | 15, 465, 494 | confirmado |
-| MEM-08 | El límite de TRANSFER no recuerda transferencias anteriores (ver CMD-TRF-03) | 361, 367 | confirmado |
+| MEM-08 | El límite de TRANSFER no recuerda transferencias anteriores (ver CMD-TRF-03). En v2 verificado con 30000+30000 | 2372, 2373 | confirmado |
 | MEM-09 | Header `X-Req`: contador que aumenta en 1 con cada `POST /msg` autenticado, aunque responda error, y que **no** vuelve a cero con `/__reset`. No aparece en respuestas 401, 404, `/__reset` ni `/health`. El set no compara headers y la réplica no lo emite | 21, 23, 3, 138, 35, 75, 1, 50 | confirmado |
 | MEM-10 | `X-Req` es un contador por token, no global | — | supuesto |
 
@@ -242,13 +248,23 @@ comando.
 
 ## 6. Cambios durante el día
 
+El proveedor desplegó una **versión 2** sin avisar qué cambió (ticket #FR-0153, abierto a las 15:30;
+el cambio real llegó más tarde). El ticket dice que **cambiaron 3 comportamientos**.
+
+**Cómo lo detectamos.** Un canario (`experimentos/canary.ts`) repetía 26 mensajes fijos cada 10
+minutos contra el original y los comparaba con una línea base. A las 16:01 reportó 9 respuestas
+distintas (`analisis/canary.md`). Acto seguido repetimos contra la v2 **las 451 llamadas
+registradas de la v1** y comparamos una por una (`experimentos/06_regrabar_v2.ts`): 28 diferencias,
+todas explicadas por los dos cambios de abajo (`analisis/06_cambios_v2_completa_1601.md`).
+
 | ID | Comportamiento | Evidencia | Confianza |
 |---|---|---|---|
-| CAM-01 | Sin cambios hasta el momento. El canario (`experimentos/canary.ts`) tomó la línea base a las 14:50 (seq `canary-1450`, 26 mensajes). Sus 20 primeras respuestas son idénticas a las de los ejemplos oficiales reproducidos a las 12:25 (ids 2-21), que a su vez coinciden con `pruebas/ejemplos.jsonl` (versión de la mañana) | 2-21, 480-506 | confirmado |
-| CAM-02 | La vuelta de las 15:00 (seq `canary-1500`) dio las mismas 26 respuestas que la línea base | 507-533 | confirmado |
-| CAM-03 | El canario repite los mismos 26 mensajes cada 10 minutos hasta las 19:50 y anota en `analisis/canary.md` "sin cambios" o una tabla con cada caso que cambió y su id del log. Así se detectaría el cambio | 480-533 | confirmado |
-
-<!-- INCIDENTE: completar -->
+| CAM-01 | Entre las 12:25 y las 15:51 el servicio no cambió: el canario dio "sin cambios" en las vueltas de 15:00, 15:10, 15:20, 15:30, 15:40 y 15:51, y dos regrabaciones completas (15:36 y 15:39, 451 requests cada una) dieron 0 diferencias | 2-21, 1255-1792 | confirmado |
+| CAM-02 | El cambio ocurrió entre las 15:51 y las 16:01. El contador del header `X-Req` volvió a 1 en la primera llamada posterior, señal de que reiniciaron el proceso | 1793, 1794 | confirmado |
+| CAM-03 | **Cambio 1 — límite de TRANSFER: de 100000 a 50000**, inclusivo. 50000 pasa; 50001, 55000 y 59999 dan E506. Sigue siendo por operación, no acumulado (30000+30000 pasa) | 2347, 2352, 2357, 2362, 2367, 2372, 2373 | confirmado |
+| CAM-04 | **Cambio 2 — formato del saldo en CONSULTA: de entero a string con 2 decimales**, con el valor interno dividido entre 100 (40000 → `"400.00"`, 12345 → `"123.45"`, -800 → `"-8.00"`). El valor interno no cambió: los montos de DEPOSITO y TRANSFER se siguen dando en la unidad entera y el límite se evalúa sobre ella | 1825, 1828, 1832, 2237, 2377, 2381 | confirmado |
+| CAM-05 | **El tercer cambio anunciado no se encontró.** Las 451 llamadas de la v1 repetidas contra la v2 solo mostraron esos 2 cambios, así que el tercero está en un comportamiento que nunca le preguntamos a la v1. Zonas candidatas sin medir en v1: límite acumulado por encima de 60000, nombres repetidos en ALTA, reglas de sugerencia para comandos mal escritos y el comando `HALT` que revela la sugerencia de `HELP` | 1793-2381 | supuesto |
+| CAM-06 | Lo demás se mantuvo igual: autenticación, rutas, métodos, validación del mensaje y del control, códigos y textos de error, orden de evaluación, numeración de `AC-`/`OP-`, anulaciones y PING sin validar el valor del control | 1795-2246 | confirmado |
 
 ## 7. Riesgos
 
@@ -259,7 +275,7 @@ heredar.
 |---|---|---|---|
 | RIE-01 | **PING no valida el control.** Un cliente puede creer que su firma está bien porque PING responde. Cierre: validar el control en todos los comandos | 30, 504, 531 | confirmado |
 | RIE-02 | **ANULA deja saldos negativos.** Se puede gastar un depósito y luego anularlo. Cierre: rechazar la anulación si el saldo no alcanza, o retener los fondos | 440, 447 | confirmado |
-| RIE-03 | **El límite de 100000 es por operación.** Se esquiva partiendo el monto. Cierre: límite acumulado por cuenta y por día | 360, 361, 366, 367 | confirmado |
+| RIE-03 | **El límite (50000 en v2) es por operación.** Se esquiva partiendo el monto. Cierre: límite acumulado por cuenta y por día | 2372, 2373, 360, 361 | confirmado |
 | RIE-04 | **El depósito no tiene límite** (hasta 9999999999 por operación). Cierre: límite de depósito y revisión de montos altos | 376, 501 | confirmado |
 | RIE-05 | **El control es un checksum, no una firma.** La fórmula se dedujo de 20 ejemplos; cualquiera con un token puede firmar. Cierre: HMAC con clave secreta | 23-32 | confirmado |
 | RIE-06 | **Textos con errores que los clientes copiarían**: `"recieved"`, `"comando desconocido "` con espacio final, y claves inconsistentes (`cuentaId` en ALTA, `cuenta_id` en CONSULTA). Cierre: que los clientes usen solo el código `error` y una versión nueva de la API con los textos corregidos | 7, 13, 4, 6 | confirmado |

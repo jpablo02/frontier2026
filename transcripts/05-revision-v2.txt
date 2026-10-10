@@ -1,0 +1,107 @@
+## Resumen
+
+- Las 28 diferencias de `06_cambios_v2_completa_1601.md` se explican con los 2 cambios conocidos. Algunas son consecuencia directa: la TRANSFER que ahora falla hace que `ANULA;OP-0003` dé E402 y corre la numeración `OP-`. Ninguna diferencia queda sin explicar, así que el tercer cambio está fuera de lo que repetimos.
+- **El método tiene un hueco.** `experimentos/06_regrabar_v2.ts` se saltó 15 líneas con `auth==="custom"` (ids 39-41, 47-49, 55-57, 63-65, 71-73) y no compara headers.
+- Lo que leí del log (no llamé al servicio) ya descarta varias zonas en v2:
+  - El depósito sigue sin límite (2376).
+  - El orden E506 → E507 se mantiene (2216).
+  - PING sigue sin validar el valor del control (1817…2460).
+  - No hay sobregiro (1809).
+  - AYUDA y HELP sugieren lo mismo (2084).
+  - ANULA sigue dejando saldo negativo (2236-2237).
+  - `1.5` sigue dando E303 (2025).
+  - `X-Req` sigue sin volver a cero con el reset.
+- El ticket de los "3 comportamientos" no está en ningún archivo del repo. Solo lo menciona el comentario de `06_regrabar_v2.ts`.
+
+## 1. Hipótesis del tercer cambio (de más a menos probable)
+
+Calculé los controles con `src/control.ts` en local. Cada secuencia empieza con `POST /__reset`, `ALTA;Ana;50` y `ALTA;Beto;11` cuando hace falta.
+
+1. **Límite acumulado mayor a 60000** (es "de dinero").
+   - Mensajes: `DEPOSITO;AC-0001;900000;77` y luego `TRANSFER;AC-0001;AC-0002;50000;59` cuatro veces.
+   - La réplica responde 200 con OP-0002 a OP-0005.
+   - Por qué: en v2 solo se probó 30000+30000 (2372-2373). Ninguna secuencia de v2 pasó de 60000 acumulado.
+2. **ALTA con nombre repetido.**
+   - Mensajes: `ALTA;Ana;50` dos veces.
+   - La réplica responde 201 `AC-0001` y luego 201 `AC-0002`.
+   - Por qué: nunca se probó. CMD-ALTA-05 es supuesto, y el caso "cuenta-duplicada" de Juan mandó un comando inexistente (id 607). Además se vería en tests cortos.
+3. **Sugerencias para nombres parecidos a comandos reales.**
+   - Mensajes: `CONSULTAR;AC-0001;66`, `DEPOSITAR;AC-0001;100;20`, `TRANSFERIR;AC-0001;AC-0002;100;52`, `ANULAR;OP-0001;13`, `ALTAS;Ana;79`, `PINGG;28`.
+   - La réplica responde E301 sin sugerencia.
+   - Por qué: los 35 nombres probados están lejos de los comandos reales. AYUDA→ANULA y HELP→HALT apuntan a una regla de parecido que no conocemos (pregunta 6, abierta). Un comando mal escrito es un test típico de un solo request.
+4. **El comando `HALT`.**
+   - Mensajes: `HALT;71` y `HALT;AC-0001;82`.
+   - La réplica responde E301 sin sugerencia.
+   - Por qué: HELP lo revela y nunca se mandó (CMD-DES-05, RIE-07). Cualquier efecto se repara con `/__reset`.
+5. **Montos con 2 decimales** (de dinero, encaja con el saldo nuevo).
+   - Mensajes: `DEPOSITO;AC-0001;12.34;12` y luego `CONSULTA;AC-0001;14`.
+   - La réplica responde E303.
+   - Es menos probable porque `1.5` sigue rechazado (2025), pero el formato exacto de 2 decimales nunca se probó.
+6. **Monto mínimo de depósito.**
+   - Mensajes: `DEPOSITO;AC-0001;1;28` y `DEPOSITO;AC-0001;99;4`.
+   - La réplica responde 200.
+   - Por qué: el depósito más chico que mandamos fue de 100. La transferencia de 1 sí pasa en v2 (2164).
+7. **Saldo máximo por cuenta.**
+   - Mensajes: `DEPOSITO;AC-0001;9999999999;4` dos veces y luego `CONSULTA;AC-0001;14`.
+   - La réplica responde dos 200 y `"199999999.98"`.
+   - Por qué: nunca se hicieron dos depósitos máximos en la misma cuenta.
+8. **Largo o validación del nombre.**
+   - Mensaje: `ALTA;` + 136 letras `A` + `;49`.
+   - La réplica responde 201.
+   - Por qué: solo se probó largo en `m` sin `;` (id 158), nunca en un nombre.
+9. **Máximo de cuentas por token.**
+   - Mensajes: 12 ALTA seguidos.
+   - La réplica responde AC-0001 a AC-0012.
+   - Por qué: el máximo que probamos en una secuencia fue 5 (242-244), y el set tiene secuencias de 6 a 12 pasos.
+10. **PING con control mal formado.**
+    - Mensaje: `PING;XX`.
+    - La réplica responde E201.
+    - Por qué: INT-13 es supuesto y nunca se mandó.
+11. **Variantes de auth que no se repitieron** (`Bearer xyz`, `Bearer ` vacío, `Basic abc`).
+    - La réplica responde 401, o 404 en rutas inexistentes.
+    - Probabilidad baja: las variantes vecinas (none, raw, lower, team) no cambiaron.
+
+**Sobre el patrón "de dinero":** casi todo lo de dinero ya se repitió y no cambió. Lo que queda sin probar es el acumulado, los decimales, el mínimo y el saldo máximo. Por eso pongo arriba la hipótesis 1, que es de dinero, y la 2-4, que no lo son pero caben en tests de un solo request.
+
+## 2. Coherencia de `src/replica.ts`
+
+- **Ninguna otra respuesta necesitaba el formato nuevo.** DEPOSITO, TRANSFER y ANULA no devuelven montos (L136-158). El formato solo aplica en CONSULTA (L134).
+- **L111, límite:** usa `>` con 50000, que coincide con lo medido. 50000 pasa (2352, y además 1809/1836 dan E507, no E506) y 50001 falla (2357).
+- **L112, saldo (E507):** compara enteros internos y está bien, porque montos y saldo usan la misma unidad. Lo prueban el ejemplo 16 en v2 (50000 contra un saldo de 40000 da E507, id 1836) y el id 2242.
+- **L34-37, `formatoSaldo`:** cuadra con todo lo observado. Nunca vimos un saldo distinto de cero con valor absoluto menor a 100. Habría que confirmar `"0.05"` y `"-0.05"`.
+  - Secuencia: `DEPOSITO;AC-0001;5;16`, `TRANSFER;AC-0001;AC-0002;5;29`, `ANULA;OP-0001;72`, `CONSULTA;AC-0001;14`.
+- **L25-29, comentarios desactualizados:** citan los ids 360-361 como si dos de 60000 pasaran, y eso es falso en v2. Además dicen "ids de 07_limite_v2.md" sin dar números.
+- **`src/diff.ts` L22-31 (riesgo alto):** sin `DESDE_ID`, compara contra los ejemplos oficiales y todo el log de v1. Va a marcar como fallas respuestas que hoy son correctas. Hay que correrlo con `DESDE_ID=1793`.
+- **`experimentos/canary.ts` L21:** el caso `transfer-limite+1` sigue mandando 100001, que ya no está en la frontera. Si el límite vuelve a moverse entre 50001 y 100000, el canario no lo ve. Debería mandar 50000 y 50001.
+- **`analisis/canary_v2.md`:** no registra la vuelta `canary-1638`, que sí está en el log.
+
+## 3. `ESPECIFICACION.md` desactualizada (hoy contiene afirmaciones falsas)
+
+- **Encabezado:** dice "observada entre 12:25 y 15:00". Hay que agregar la v2 vigente desde las 16:01.
+- **Tabla de comandos y CMD-CON-01:** dicen `"saldo":0` y `<entero>`. Ahora es un string con 2 decimales, el valor interno dividido entre 100. Evidencia: 1825, 1828, 2237, 2377, 2381.
+- **CMD-TRF-02:** el límite de 100000 es falso. Ahora es 50000 inclusivo (2347, 2352, 2357, 2362, 2367, 1836).
+- **CMD-TRF-03 y MEM-08:** "dos de 60000 pasan" es falso (2157-2158). Hay que reemplazarlo por 30000+30000 (2372-2373).
+- **RIE-03:** dice 100000; corregir a 50000 y actualizar la evidencia.
+- **CMD-ANU-04:** los literales `-800` y `-1000` ahora se ven como `"-8.00"` y `"-10.00"` (2237, 2244).
+- **Sección 6 (CAM-01 a CAM-03):** "sin cambios hasta el momento" es falso, y queda el `<!-- INCIDENTE: completar -->`. Hay que escribir:
+  - El cambio ocurrió entre las 15:51 (canary-1551) y las 16:01 (canary-1601). `X-Req` volvió a 1 en el id 1794, lo que apunta a un redespliegue.
+  - El método: 451 requests repetidos y 28 diferencias, todas explicadas.
+  - Que el ticket anuncia 3 cambios y vamos 2. Decirlo como pendiente, no como "no hay más".
+- **Siguen válidas:** ERR-11 y ERR-17 a ERR-20 (usan 120000, que sigue por encima de 50000), CMD-DEP-05 (agregar el id 2376) y CMD-TRF-07 (agregar el id 2242).
+- **Regla para corregir:** dejar las filas de v1 marcadas "v1, hasta 15:51" y agregar filas de v2. Así no se borra evidencia y no queda nada falso para la versión vigente.
+
+## 4. Veredicto: buscar primero el tercer cambio, con tiempo acotado, y después usar la corrida 2
+
+- **Ejecución (40%):** solo cuenta la corrida de después de las 20:00. Las corridas del día no puntúan, solo informan. En este criterio pesan tres cosas:
+  - "Respuesta al incidente": detectar, adaptar y explicar el cambio. Un cambio sin encontrar lo deja incompleto.
+  - "Especificación": hoy tiene afirmaciones falsas que restan.
+  - El resultado del set: el tercer cambio probablemente aparece en varios tests.
+- **Debrief (15%):** piden "explicar cada falla con una causa concreta". Un número de la corrida sin hipótesis cerradas no deja explicar nada.
+- **Lo que solo la corrida puede dar:** cuántos de los 100 tests ocultos pasan con la versión vigente. Ningún experimento propio mide qué tanto del set cae en zonas que no hemos probado. Su límite: es un total, no dice cuáles tests fallan (README: "ves cuántos pasan").
+- **Por qué no gastarla ahora:** el número mezclaría tres incógnitas. No sabemos si el 60/100 de la corrida 1 fue contaminación, cuánto suman los 2 cambios aplicados ni cuánto falta por el tercero. Las hipótesis 1 a 11 cuestan unos 80 requests y de 30 a 45 minutos, y cada una se puede confirmar o descartar con el log como evidencia.
+- **Plan propuesto:**
+  1. Probar las hipótesis por lotes en orden.
+  2. Corregir la réplica y `ESPECIFICACION.md`, y correr `diff.ts` con `DESDE_ID=1793`.
+  3. Hacer la corrida 2 alrededor de las 17:45, sin canario ni comparador corriendo contra producción (la lección de las 14:19).
+  4. Guardar la corrida 3 para hacia las 19:15, como verificación del despliegue final.
+- **Excepción:** si a las 17:30 no aparece el tercer cambio, igual hay que hacer la corrida 2. Un puntaje alto diría que el set casi no lo toca, y entonces el resto del tiempo conviene ponerlo en la especificación.
