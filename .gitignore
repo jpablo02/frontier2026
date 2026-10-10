@@ -19,3 +19,6 @@ sess/
 # SO
 .DS_Store
 Thumbs.db
+
+# candado de la sonda
+.probe.lock/

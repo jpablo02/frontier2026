@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, mkdirSync, rmSync, statSync } from "node:fs";
 
 const BASE = "https://caja-negra-production-c64f.up.railway.app";
 const LOG = new URL("../experimentos.jsonl", import.meta.url);
@@ -137,6 +137,37 @@ export async function send(opts: SendOpts): Promise<SendResult> {
   return { id, status: res.status, raw, json, xReq };
 }
 
-export function reset(seq: string): Promise<SendResult> {
+// --- candado entre procesos ---
+// El canario y los experimentos comparten el token, o sea el mismo estado en el original. Si dos
+// procesos mandan secuencias a la vez, sus resets se pisan. El primer reset de un proceso toma el
+// candado y lo suelta al terminar (o con release()); los demás esperan su turno.
+const LOCK = new URL("../.probe.lock/", import.meta.url);
+const LOCK_STALE_MS = 120_000;
+let tengoCandado = false;
+
+async function adquirir(): Promise<void> {
+  for (;;) {
+    try {
+      mkdirSync(LOCK);
+      tengoCandado = true;
+      process.once("exit", release);
+      return;
+    } catch {
+      try {
+        if (Date.now() - statSync(LOCK).mtimeMs > LOCK_STALE_MS) rmSync(LOCK, { recursive: true, force: true });
+      } catch {}
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+}
+
+export function release(): void {
+  if (!tengoCandado) return;
+  rmSync(LOCK, { recursive: true, force: true });
+  tengoCandado = false;
+}
+
+export async function reset(seq: string): Promise<SendResult> {
+  if (!tengoCandado) await adquirir();
   return send({ seq, hipotesis: "reset de secuencia", path: "/__reset" });
 }
