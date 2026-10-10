@@ -107,7 +107,7 @@ cantidad fija de argumentos. Si no coincide: `400` `{"error":"E302","mensaje":"a
 |---|---|---|---|
 | CMD-PING-01 | `PING;<c>` → `200` `{"pong":true}`. No cambia el estado | 2, 29, 34, 481 | confirmado |
 | CMD-PING-02 | Con un argumento (`PING;AC-0001;87`) → `400` E302 | 324 | probable |
-| CMD-PING-03 | No valida el valor del control (ver INT-12) | 30, 504, 531 | confirmado |
+| CMD-PING-03 | **PING no valida el control en absoluto**: ni su valor (`PING;65` → 200, control correcto 64) ni su formato (`PING;XX` → 200, donde cualquier otro comando daría E201) | 30, 2555 | confirmado |
 
 ### ALTA
 
@@ -178,7 +178,10 @@ cantidad fija de argumentos. Si no coincide: `400` `{"error":"E302","mensaje":"a
 | CMD-DES-01 | Un comando que no está en la tabla → `400` `{"error":"E301","mensaje":"comando desconocido "}` (con espacio final), con cualquier cantidad de argumentos. Probados: SALDOS, RETIRO, RETIRAR, SALDO, BAJA, CIERRE, CERRAR, LISTA, LISTAR, HISTORIAL, EXTRACTO, MOVIMIENTOS, BLOQUEO, BLOQUEAR, DESBLOQUEO, VERSION, ECHO, RESET, INFO, STATUS, ESTADO, CUENTAS, PAGO, CREDITO, DEBITO, ABONO, CARGO, LIMITE, TASA, INTERES, AUDITORIA, LOG, REPORTE | 13, 492, 209, 254-283, 288-323 | confirmado |
 | CMD-DES-02 | `AYUDA` agrega una sugerencia: `{"error":"E301","mensaje":"comando desconocido ","sugerencia":"ANULA"}` | 284, 285, 503 | confirmado |
 | CMD-DES-03 | `HELP` agrega `"sugerencia":"HALT"` | 286, 287 | confirmado |
-| CMD-DES-04 | Ningún otro nombre trae sugerencia. Solo se probaron los de CMD-DES-01; se desconoce la regla de las sugerencias | — | supuesto |
+| CMD-DES-04 | **Regla de la sugerencia: el comando real a distancia de edición (Levenshtein) <= 2.** CONSULTAR→CONSULTA, DEPOSITAR→DEPOSITO, TRANSFERIR→TRANSFER, ANULAR→ANULA, ALTAS→ALTA, PINGG→PING | 2507-2512 | confirmado |
+| CMD-DES-06 | El umbral 2 es el único que explica los 8 casos con sugerencia (AYUDA, HELP y los 6 de CMD-DES-04) y a la vez deja sin sugerencia a los 33 nombres que no la recibieron (SALDO, BAJA, LISTA, INFO, PAGO, DEBITO, TASA, LOG estarían a distancia 3) | 254-323, 2507-2512 | confirmado |
+| CMD-DES-07 | **`HALT` existe como comando**, aunque no aparezca en los ejemplos: lo revela la sugerencia de `HELP`. Con 1 argumento → `409` `{"error":"E520","mensaje":"operación destructiva: detiene el servicio; reenvía con confirmación"}`; sin argumentos → E302. No cambió el estado | 2516, 2518, 2519 | confirmado |
+| CMD-DES-08 | No se mandó la confirmación que pide E520: el mensaje dice que detiene el servicio y no hay certeza de que `/__reset` lo repare. La réplica responde E520 siempre | 2518 | supuesto |
 | CMD-DES-05 | `HALT` no es un comando (la réplica responde E301 sin sugerencia). No se probó en el original | — | supuesto |
 
 ## 4. Memoria entre requests

@@ -1,0 +1,27 @@
+Corrí `experimentos/08_hipotesis_v2.ts` una vez y usó **81 requests** (ids 2490–2570, tope 150). Ninguna de las 12 pruebas demuestra cuál es el tercer cambio de v2. Tres respuestas no coinciden con la réplica, pero ninguna de las tres se puede comparar con v1.
+
+Los resultados y la comparación están en `analisis/08_hipotesis_v2.md`.
+
+**Descartadas (el original responde igual que la réplica), 9 hipótesis más el caso extra:**
+- **H1, límite acumulado:** cuatro transferencias de 50000 pasan (2494–2497).
+- **H2, ALTA con nombre repetido:** crea AC-0001 y AC-0002 (2501–2502).
+- **H5, montos con 2 decimales:** `12.34` da E303 (2523).
+- **H6, depósito mínimo:** 1 y 99 pasan, saldo `"1.00"` (2528–2530).
+- **H7, saldo máximo:** dos depósitos máximos dejan `"199999999.98"` (2536).
+- **H8, nombre de 136 letras:** 201 (2538).
+- **H9, 12 cuentas:** se crean todas (2541–2553).
+- **H11, variantes de auth:** 401 en `/msg` y 404 en ruta inexistente (2557–2562).
+- **Saldo menor a un peso:** `"-0.05"` y `"0.05"` (2569–2570), así que el formato de saldo de la réplica es correcto.
+
+**Diferencias con la réplica:**
+1. **H3, sugerencias (2507–2512):** el E301 trae el comando real más parecido:
+   - CONSULTAR→CONSULTA, DEPOSITAR→DEPOSITO, TRANSFERIR→TRANSFER;
+   - ANULAR→ANULA, ALTAS→ALTA, PINGG→PING.
+
+   Esto, junto con AYUDA→ANULA y HELP→HALT, apunta a sugerir el comando que está a 1 o 2 letras de diferencia. Falta medir el umbral exacto.
+2. **H4, HALT existe (2516, 2518):** con un argumento, `HALT;AC-0001` da **409 E520**: "operación destructiva: detiene el servicio; reenvía con confirmación". Sin argumento da E302. El estado no cambió (2519). No mandé la confirmación, porque el mensaje dice que detiene el servicio y no está claro que `/__reset` lo arregle.
+3. **H10, `PING;XX` → 200 (2555):** PING ignora el control por completo, no solo el valor (id 30) sino también el formato (E201).
+
+**¿Cuál es el tercer cambio?** Ninguna de las tres diferencias aparece antes del id 1793: en v1 nunca se mandaron esos mensajes. Así que son huecos de la réplica, pero no se puede decir que alguno sea el cambio de v2; quizá ya existían en v1. La candidata más fuerte es H3, porque afecta a cualquier comando mal escrito y se vería en tests de un solo request. Eso es una inferencia, no una medición.
+
+No toqué `src/replica.ts` ni `ESPECIFICACION.md` y no hice commit. `analisis/canary_v2.md` aparece modificado porque lo escribe el canario, no este experimento.

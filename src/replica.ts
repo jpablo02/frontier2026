@@ -51,9 +51,41 @@ function parse(c: Ctx) {
 const jsonOk = (c: Ctx) => { parse(c); return c.json !== undefined; };
 const tieneM = (c: Ctx) => c.json !== null && typeof c.json === "object" && !Array.isArray(c.json) && typeof c.json.m === "string";
 
-// Sugerencias observadas (ids 284-287). SUPUESTO: no hay más; el algoritmo real no se conoce.
-const SUGERENCIAS: Record<string, string> = { AYUDA: "ANULA", HELP: "HALT" };
-const ARIDAD: Record<string, number> = { PING: 0, ALTA: 1, CONSULTA: 1, DEPOSITO: 2, TRANSFER: 3, ANULA: 1 };
+// Ante un comando desconocido el original sugiere el comando real a distancia de edición <= 2
+// (AYUDA->ANULA, HELP->HALT: ids 284-287; CONSULTAR->CONSULTA, DEPOSITAR->DEPOSITO,
+// TRANSFERIR->TRANSFER, ANULAR->ANULA, ALTAS->ALTA, PINGG->PING: ids 2507-2512). El umbral 2 es el
+// único que explica esos 8 casos y a la vez no sugiere nada para los 33 nombres que no recibieron
+// sugerencia (ids 254-283, 288-323). HALT existe como comando aunque no esté en ARIDAD.
+const COMANDOS_CONOCIDOS = ["PING", "ALTA", "CONSULTA", "DEPOSITO", "TRANSFER", "ANULA", "HALT"];
+const MAX_DISTANCIA_SUGERENCIA = 2;
+
+function distancia(a: string, b: string): number {
+  const d = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = d[0];
+    d[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = d[j];
+      d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return d[b.length];
+}
+
+function sugerir(cmd: string): string | undefined {
+  let mejor: string | undefined;
+  let mejorD = Infinity;
+  for (const c of COMANDOS_CONOCIDOS) {
+    const d = distancia(cmd, c);
+    if (d < mejorD) { mejorD = d; mejor = c; }
+  }
+  return mejorD <= MAX_DISTANCIA_SUGERENCIA ? mejor : undefined;
+}
+
+// SUPUESTO: HALT con 1 argumento responde 409 E520 (id 2518) y no cambia el estado (id 2519). No se
+// mandó la confirmación que pide el mensaje, porque dice que detiene el servicio.
+const ARIDAD: Record<string, number> = { PING: 0, ALTA: 1, CONSULTA: 1, DEPOSITO: 2, TRANSFER: 3, ANULA: 1, HALT: 1 };
 
 // Orden: primero lo que se evalúa para cualquier mensaje. Los datos lo fijan así:
 // E100 < E102 < E103 < E104 < E201 < E202 < E301 < E302 (ids 138-159, 163-176, 178-217, 254-335).
@@ -70,12 +102,17 @@ const PASOS_MENSAJE: Paso[] = [
   },
   {
     codigo: "E201", status: 400, mensaje: "control mal formado",
-    chequeo: (c) => { c.ctrl = c.segs[c.segs.length - 1]; return !/^(0|[1-9]\d?)$/.test(c.ctrl); },
+    chequeo: (c) => {
+      c.ctrl = c.segs[c.segs.length - 1];
+      if (c.segs[0].toUpperCase() === "PING") return false; // PING ignora el formato del control (id 2555)
+      return !/^(0|[1-9]\d?)$/.test(c.ctrl);
+    },
   },
   {
     codigo: "E202", status: 400, mensaje: "control inválido",
-    // SUPUESTO: PING no valida el valor del control (PING;65 → 200 con control correcto 64, id 30); con los
-    // demás comandos 1 de diferencia ya es E202 (ids 28, 32). No se sabe si es PING o todo comando sin args.
+    // PING no valida el control: ni su valor (PING;65 → 200, id 30) ni su formato (PING;XX → 200,
+    // id 2555, donde cualquier otro comando daría E201). Con los demás, 1 de diferencia ya es E202
+    // (ids 28, 32). Por eso PING se exceptúa antes de E201 y de E202.
     chequeo: (c) => c.segs[0].toUpperCase() !== "PING" && control(c.segs.slice(0, -1).join(";")) !== Number(c.ctrl),
   },
   {
@@ -85,7 +122,7 @@ const PASOS_MENSAJE: Paso[] = [
       c.args = c.segs.slice(1, -1);
       return !(c.cmd in ARIDAD);
     },
-    extra: (c) => (SUGERENCIAS[c.cmd] ? { sugerencia: SUGERENCIAS[c.cmd] } : {}),
+    extra: (c) => { const s = sugerir(c.cmd); return s ? { sugerencia: s } : {}; },
   },
   { codigo: "E302", status: 400, mensaje: "aridad inválida", chequeo: (c) => c.args.length !== ARIDAD[c.cmd] },
 ];
@@ -97,6 +134,7 @@ const cuentaNo = (s: string) => !estado.cuentas.has(s);
 const PASOS_COMANDO: Record<string, Paso[]> = {
   PING: [],
   ALTA: [],
+  HALT: [], // sin validaciones propias: con aridad 1 responde 409 E520 (id 2518)
   CONSULTA: [{ codigo: "E401", status: 404, mensaje: "cuenta inexistente", chequeo: (c) => cuentaNo(c.args[0]) }],
   DEPOSITO: [
     { codigo: "E303", status: 400, mensaje: "monto inválido", chequeo: (c) => !MONTO_RE.test(c.args[1]) },
@@ -126,6 +164,7 @@ function primerError(pasos: Paso[], c: Ctx): Resp | null {
 const nuevaOp = (op: Op) => { const id = `OP-${pad(++estado.nOps)}`; estado.ops.set(id, op); return id; };
 const EJECUTAR: Record<string, (c: Ctx) => Resp> = {
   PING: () => ({ status: 200, body: { pong: true } }),
+  HALT: () => ({ status: 409, body: { error: "E520", mensaje: "operación destructiva: detiene el servicio; reenvía con confirmación" } }),
   ALTA: () => {
     const id = `AC-${pad(++estado.nCuentas)}`;
     estado.cuentas.set(id, 0);
