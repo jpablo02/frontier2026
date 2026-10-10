@@ -80,7 +80,7 @@ lo compara.
 | INT-10 | Los espacios no cuentan (`ALTA;Ana Maria;44`) | 244 | probable |
 | INT-11 | Las letras con tilde no cuentan (`ALTA;José;61`, igual que `ALTA;Jos`) | 243 | probable |
 | INT-12 | `PING` no valida el valor del control: `PING;65` responde `200` `{"pong":true}` (el correcto es 64) | 30, 504, 531 | confirmado |
-| INT-13 | `PING` con control mal formado (por ejemplo `PING;XX`) da E201 como cualquier comando. No está medido; la réplica responde E201 | — | supuesto |
+| INT-13 | `PING` **no** valida el formato del control: `PING;XX` → `200` `{"pong":true}`, donde cualquier otro comando daría E201. PING se salta E201 y E202 (ver CMD-PING-03) | 30, 2555 | confirmado |
 | INT-14 | Un `0` solo cuenta como control bien formado (y da E202, porque la fórmula nunca da 0) | — | supuesto |
 
 ## 3. Comandos
@@ -94,6 +94,7 @@ cantidad fija de argumentos. Si no coincide: `400` `{"error":"E302","mensaje":"a
 | `ALTA` | 1: nombre | `201` `{"cuentaId":"AC-0001"}` |
 | `CONSULTA` | 1: cuenta | v2: `200` `{"cuenta_id":"AC-0001","saldo":"0.00"}` · v1: `"saldo":0` |
 | `DEPOSITO` | 2: cuenta, monto | `200` `{"status":"recieved","operacionId":"OP-0001"}` |
+| `HALT` | 1 | `409` `{"error":"E520","mensaje":"operación destructiva: detiene el servicio; reenvía con confirmación"}` (no hay respuesta de éxito conocida) |
 | `TRANSFER` | 3: origen, destino, monto | `200` `{"status":"recieved","operacionId":"OP-0002"}` |
 | `ANULA` | 1: operación | `200` `{"ok":true,"anulada":"OP-0003"}` |
 
@@ -180,9 +181,10 @@ cantidad fija de argumentos. Si no coincide: `400` `{"error":"E302","mensaje":"a
 | CMD-DES-03 | `HELP` agrega `"sugerencia":"HALT"` | 286, 287 | confirmado |
 | CMD-DES-04 | **Regla de la sugerencia: el comando real a distancia de edición (Levenshtein) <= 2.** CONSULTAR→CONSULTA, DEPOSITAR→DEPOSITO, TRANSFERIR→TRANSFER, ANULAR→ANULA, ALTAS→ALTA, PINGG→PING | 2507-2512 | confirmado |
 | CMD-DES-06 | El umbral 2 es el único que explica los 8 casos con sugerencia (AYUDA, HELP y los 6 de CMD-DES-04) y a la vez deja sin sugerencia a los 33 nombres que no la recibieron (SALDO, BAJA, LISTA, INFO, PAGO, DEBITO, TASA, LOG estarían a distancia 3) | 254-323, 2507-2512 | confirmado |
+| CMD-DES-09 | **Sin medir:** qué sugiere el original cuando dos comandos empatan en distancia (`ALT` está a 1 de ALTA y de HALT). La réplica devuelve el primero en el orden PING, ALTA, CONSULTA, DEPOSITO, TRANSFER, ANULA, HALT | — | supuesto |
 | CMD-DES-07 | **`HALT` existe como comando**, aunque no aparezca en los ejemplos: lo revela la sugerencia de `HELP`. Con 1 argumento → `409` `{"error":"E520","mensaje":"operación destructiva: detiene el servicio; reenvía con confirmación"}`; sin argumentos → E302. No cambió el estado | 2516, 2518, 2519 | confirmado |
 | CMD-DES-08 | No se mandó la confirmación que pide E520: el mensaje dice que detiene el servicio y no hay certeza de que `/__reset` lo repare. La réplica responde E520 siempre | 2518 | supuesto |
-| CMD-DES-05 | `HALT` no es un comando (la réplica responde E301 sin sugerencia). No se probó en el original | — | supuesto |
+| CMD-DES-05 | `HALT` **sí es un comando** del original (ver CMD-DES-07): con 1 argumento responde `409` E520 y sin argumentos E302 | 2516, 2518 | confirmado |
 
 ## 4. Memoria entre requests
 
@@ -213,9 +215,9 @@ comando.
 | 4 | E102 | 400 | `{"error":"E102","mensaje":"falta m"}` | No es un objeto con `m` string | 141, 144 |
 | 5 | E103 | 400 | `{"error":"E103","mensaje":"falta control"}` | `m` sin `;` | 147, 155 |
 | 6 | E104 | 400 | `{"error":"E104","mensaje":"segmento vacío"}` | Algún segmento vacío | 153, 156 |
-| 7 | E201 | 400 | `{"error":"E201","mensaje":"control mal formado"}` | Control que no es entero de 1–2 dígitos | 18, 163 |
+| 7 | E201 | 400 | `{"error":"E201","mensaje":"control mal formado"}` | Control que no es entero de 1–2 dígitos. **PING se salta este paso** (id 2555) | 18, 163 |
 | 8 | E202 | 400 | `{"error":"E202","mensaje":"control inválido"}` | Control que no coincide (salvo PING) | 3, 24 |
-| 9 | E301 | 400 | `{"error":"E301","mensaje":"comando desconocido "}` (+ `"sugerencia"` en AYUDA/HELP) | Comando que no existe | 13, 254 |
+| 9 | E301 | 400 | `{"error":"E301","mensaje":"comando desconocido "}` (+ `"sugerencia"` si hay un comando real a distancia de edición ≤ 2; ver CMD-DES-04) | Comando que no existe | 13, 254 |
 | 10 | E302 | 400 | `{"error":"E302","mensaje":"aridad inválida"}` | Cantidad de argumentos incorrecta | 21, 324 |
 | 11a | E303 | 400 | `{"error":"E303","mensaje":"monto inválido"}` | DEPOSITO, TRANSFER | 225, 226 |
 | 11b | E304 | 400 | `{"error":"E304","mensaje":"origen y destino iguales"}` | TRANSFER | 234, 411 |
@@ -223,6 +225,7 @@ comando.
 | 11d | E506 | 422 | `{"error":"E506","mensaje":"límite excedido"}` | TRANSFER | 10, 340 |
 | 11e | E507 | 422 | `{"error":"E507","mensaje":"saldo insuficiente"}` | TRANSFER | 17, 380 |
 | 11f | E402 | 404 | `{"error":"E402","mensaje":"operación inexistente"}` | ANULA | 248, 251 |
+| 11g | E520 | 409 | `{"error":"E520","mensaje":"operación destructiva: detiene el servicio; reenvía con confirmación"}` | HALT con 1 argumento | 2518 |
 | — | — | 200 | `{"ok":false,"motivo":"ya anulada"}` | ANULA repetido (no es error HTTP) | 15, 465, 494 |
 
 | ID | Comportamiento | Evidencia | Confianza |
@@ -282,7 +285,7 @@ heredar.
 | RIE-04 | **El depósito no tiene límite** (hasta 9999999999 por operación). Cierre: límite de depósito y revisión de montos altos | 376, 501 | confirmado |
 | RIE-05 | **El control es un checksum, no una firma.** La fórmula se dedujo de 20 ejemplos; cualquiera con un token puede firmar. Cierre: HMAC con clave secreta | 23-32 | confirmado |
 | RIE-06 | **Textos con errores que los clientes copiarían**: `"recieved"`, `"comando desconocido "` con espacio final, y claves inconsistentes (`cuentaId` en ALTA, `cuenta_id` en CONSULTA). Cierre: que los clientes usen solo el código `error` y una versión nueva de la API con los textos corregidos | 7, 13, 4, 6 | confirmado |
-| RIE-07 | **La sugerencia de HELP revela un nombre interno (`HALT`)** que no aparece en ningún ejemplo. Si `HALT` existe, podría ser una operación peligrosa. Cierre: quitar las sugerencias o limitarlas a comandos públicos (no se probó `HALT`) | 286, 287 | confirmado (la sugerencia), supuesto (que HALT exista) |
+| RIE-07 | **La sugerencia de HELP revela un nombre interno (`HALT`)**, confirmado como comando: responde E520 y dice que detiene el servicio. Un atacante puede descubrirlo probando nombres parecidos. Cierre: quitar las sugerencias o limitarlas a comandos no destructivos | 286, 287, 2518 | confirmado |
 | RIE-08 | **Las rutas se pueden enumerar:** una ruta válida sin token da 401 y una inexistente da 404. Cierre: autenticar antes de resolver la ruta | 35, 59 | confirmado |
 | RIE-09 | **Ids predecibles** (`AC-0001`, `OP-0001`, consecutivos): facilitan adivinar cuentas y operaciones ajenas. Cierre: ids aleatorios y control de dueño | 4, 5, 7, 8 | confirmado |
 | RIE-10 | **`X-Req` expone cuántos mensajes mandó el token y sobrevive al reset.** Cierre: quitarlo o que sea un id aleatorio por request | 21, 23 | confirmado |

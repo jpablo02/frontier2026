@@ -1,0 +1,59 @@
+# Revisión de `src/replica.ts`: no encontré ningún error del tipo de HALT
+
+Solo leí archivos. Además de los cuatro que pide el prompt, leí `src/control.ts`, porque `E202` depende de él. Lo único que ejecuté fue un `node -e` aislado que recalcula la distancia de edición sobre listas de nombres escritas a mano. No llamé a ningún servicio, no cargué la réplica y no modifiqué nada.
+
+## Hallazgos, de más a menos grave
+
+**1. Empates en la sugerencia (sospecha, puede afectar tests de un solo request)**
+- **Dónde:** línea 81. Como compara con `<` estricto, en un empate gana el primero de `COMANDOS_CONOCIDOS`.
+- **Qué lo dispara:** `ALT;x;<c>` y `HALTA;x;<c>` quedan a distancia 1 de ALTA y de HALT. `ANA;x;<c>` queda a distancia 2 de ALTA y de ANULA.
+- **Qué responde hoy:** `400 {"error":"E301","mensaje":"comando desconocido ","sugerencia":"ALTA"}` en los tres casos.
+- **Qué debería responder:** no se sabe. Ninguno de los 8 casos con sugerencia (284-287, 2507-2512) tiene empate, así que el desempate del original no está medido. `08_hipotesis_v2.md` también lo deja abierto.
+- **Comprobado:** con el umbral 2, ninguno de los 33 nombres sin sugerencia recibe una, y los 8 que sí la tienen quedan con un ganador único.
+
+**2. HALT responde E520 con cualquier argumento (sospecha)**
+- **Dónde:** líneas 137 y 175.
+- **Qué lo dispara:** `HALT;AC-0009;<c>` (cuenta inexistente), `HALT;Ana;<c>` o `HALT;CONFIRMAR;<c>`.
+- **Qué responde hoy:** `409 E520` siempre.
+- **Evidencia:** solo `HALT;AC-0001;82` (2518), con una cuenta que existe. Ese caso muestra que el saldo no cambió (2519), pero no muestra los contadores `AC-`/`OP-`. Queda sin probar si el original valida el argumento (por ejemplo, si da `E401`) o si acepta alguna palabra de confirmación. Ya está marcado como supuesto en CMD-DES-08.
+
+**3. Mayúsculas con Unicode (sospecha baja)**
+- **Dónde:** líneas 107, 116 y 121, y `control.ts:3`.
+- **Qué lo dispara:** `pıng;XX` (con `ı` sin punto) se convierte en `PING`, así que hoy responde `200 {"pong":true}`. Del mismo modo, una `ß` se vuelve `SS` y suma cifras al control.
+- **Qué debería responder:** no se sabe. Solo importa si los tests usan ese tipo de caracteres.
+
+**4. Fragilidad latente (sin fallo hoy)**
+- **Línea 203:** las cuatro tablas siguen sin un chequeo que las amarre. Si un comando queda fuera de `PASOS_COMANDO`, `primerError(undefined)` lanza "not iterable" y la réplica responde `500`, que es el mismo error de HALT.
+- **Líneas 103-123:** los chequeos tienen efectos secundarios. `c.m`, `c.segs`, `c.ctrl`, `c.cmd` y `c.args` se asignan dentro de los `chequeo`, así que reordenar los pasos rompe los siguientes.
+- **Línea 123:** `in` también mira el prototipo de `Object`. Hoy no se puede aprovechar, porque todas esas claves tienen minúsculas y `cmd` siempre llega en mayúsculas (`__proto__` se convierte en `__PROTO__`).
+
+**5. Documentación desalineada con el código (confirmado; no afecta los tests)**
+- **Línea 58:** el comentario dice "aunque no esté en ARIDAD", pero HALT sí está (línea 88).
+- **ESPECIFICACION INT-13:** dice que `PING;XX` da E201. Eso contradice CMD-PING-03, el id 2555 y el código.
+- **ESPECIFICACION CMD-DES-05:** dice que "HALT no es un comando". Eso contradice CMD-DES-07.
+- **Sección 5, posición 9:** dice "sugerencia en AYUDA/HELP"; ya se mostró que es por distancia de edición.
+- **Sección 5, posición 7:** no menciona que PING se salta E201.
+- **Tablas:** a la de errores de la sección 5 le falta `E520 409`, y a la de comandos de la sección 3 le falta HALT.
+- **RIE-07:** dice que HALT no se probó, y sí se probó (2516-2519).
+- **`08_hipotesis_v2.md`:** habla de "35 nombres sin sugerencia", pero la spec y el log dan 33.
+
+## Lo que no tiene hallazgos, punto por punto
+
+1. **Caminos que revientan:** ninguno.
+   - Cada `!` (líneas 150, 177, 180, 184, 186, 191 y 193-194) va precedido por E401 o E402. Las cuentas solo se borran con `__reset`, que también borra las operaciones.
+   - `segs[0]` siempre existe y E104 garantiza que no está vacío.
+   - `Number(ctrl)` y `monto()` solo se usan con valores ya validados por regex, así que no producen `NaN`.
+   - `BigInt` recibe solo dígitos.
+   - `formatoSaldo` funciona hasta unos 9e15. Doce depósitos máximos suman unos 1.2e11, lejos de ese límite.
+2. **Tablas:** `ARIDAD`, `PASOS_COMANDO`, `EJECUTAR` y `COMANDOS_CONOCIDOS` tienen los mismos 7 comandos.
+3. **Estado y secuencias:**
+   - `AC-` y `OP-` solo avanzan cuando el comando tiene éxito (líneas 158 y 172).
+   - ANULA, HALT y los errores no consumen número.
+   - `reset` limpia los cuatro campos.
+   - Pasar de `AC-9999` a `AC-10000` funciona (`padStart` no recorta), pero es un supuesto (CMD-ALTA-06) y no se alcanza en 12 pasos.
+   - El saldo negativo tras una anulación lleva a E507, como debe.
+4. **Formato:** todos los textos, tildes, claves (`cuentaId`/`cuenta_id`), el orden de las claves (`error`, `mensaje`, `sugerencia`), `"recieved"`, el espacio final de E301 y el saldo como string coinciden con `01_entrada.md`, `08_hipotesis_v2.md` y la spec.
+5. **Orden de validaciones:**
+   - Rutas, luego autenticación, luego la cadena E100 → E302, con PING exceptuado de E201 y E202.
+   - Dentro de los comandos: E303 → E304 → E401 → E506 → E507, y E402 en ANULA.
+   - Todo coincide con ERR-02 a ERR-20 y sus ids.

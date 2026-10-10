@@ -51,11 +51,12 @@ function parse(c: Ctx) {
 const jsonOk = (c: Ctx) => { parse(c); return c.json !== undefined; };
 const tieneM = (c: Ctx) => c.json !== null && typeof c.json === "object" && !Array.isArray(c.json) && typeof c.json.m === "string";
 
-// Ante un comando desconocido el original sugiere el comando real a distancia de edición <= 2
+// Ante un comando desconocido el original sugiere el comando real a distancia de edicion <= 2.
+// HALT es comando (id 2518), por eso esta tambien en ARIDAD.
 // (AYUDA->ANULA, HELP->HALT: ids 284-287; CONSULTAR->CONSULTA, DEPOSITAR->DEPOSITO,
 // TRANSFERIR->TRANSFER, ANULAR->ANULA, ALTAS->ALTA, PINGG->PING: ids 2507-2512). El umbral 2 es el
 // único que explica esos 8 casos y a la vez no sugiere nada para los 33 nombres que no recibieron
-// sugerencia (ids 254-283, 288-323). HALT existe como comando aunque no esté en ARIDAD.
+// sugerencia (ids 254-283, 288-323)
 const COMANDOS_CONOCIDOS = ["PING", "ALTA", "CONSULTA", "DEPOSITO", "TRANSFER", "ANULA", "HALT"];
 const MAX_DISTANCIA_SUGERENCIA = 2;
 
