@@ -8,7 +8,7 @@ import { firmar } from "../src/control.ts";
 
 const INTERVALO_MS = 10 * 60 * 1000;
 const FIN_BOGOTA = "19:50";
-const reporte = new URL("../analisis/canary.md", import.meta.url);
+const reporte = new URL(`../analisis/${process.env.CANARY_REPORTE ?? "canary.md"}`, import.meta.url);
 
 type Paso = { nombre: string; opts: Omit<SendOpts, "seq" | "hipotesis"> };
 const ejemplos = readFileSync(new URL("../frontier-reto-2/pruebas/ejemplos.jsonl", import.meta.url), "utf8")

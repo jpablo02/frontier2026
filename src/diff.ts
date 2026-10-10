@@ -19,13 +19,19 @@ type Linea = {
 const leer = (f: string): any[] =>
   readFileSync(f, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
 
+// DESDE_ID=n compara solo contra el log desde ese id (por ejemplo, desde el cambio a la versión 2).
+// En ese modo se omiten los ejemplos oficiales, que se grabaron con la versión de la mañana.
+const DESDE_ID = Number(process.env.DESDE_ID ?? 0);
+
 const lineas: Linea[] = [];
-// Ejemplos oficiales: un reset y luego cada uno como POST /msg.
-lineas.push({ id: "of-reset", seq: "oficial", request: null, status: 200, response: { ok: true }, metodo: "POST", ruta: "/__reset", auth: "ok" });
-for (const e of leer("frontier-reto-2/pruebas/ejemplos.jsonl"))
-  lineas.push({ ...e, id: `of-${e.n}`, seq: "oficial", metodo: "POST", ruta: "/msg", auth: "ok" });
+if (!DESDE_ID) {
+  // Ejemplos oficiales: un reset y luego cada uno como POST /msg.
+  lineas.push({ id: "of-reset", seq: "oficial", request: null, status: 200, response: { ok: true }, metodo: "POST", ruta: "/__reset", auth: "ok" });
+  for (const e of leer("frontier-reto-2/pruebas/ejemplos.jsonl"))
+    lineas.push({ ...e, id: `of-${e.n}`, seq: "oficial", metodo: "POST", ruta: "/msg", auth: "ok" });
+}
 // El log ya incluye los resets de cada secuencia como líneas propias.
-lineas.push(...leer("experimentos.jsonl"));
+lineas.push(...leer("experimentos.jsonl").filter((l) => l.id >= DESDE_ID));
 
 function authHeader(modo = "ok"): string | undefined {
   switch (modo) {

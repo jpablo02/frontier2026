@@ -42,27 +42,23 @@ async function throttle(): Promise<void> {
 }
 
 // --- log serial ---
-let nextId: number | null = null;
-function initId(): number {
-  if (nextId !== null) return nextId;
-  let last = 0;
-  if (existsSync(LOG)) {
-    const lines = readFileSync(LOG, "utf8").split("\n").filter((l) => l.trim());
-    if (lines.length) {
-      try {
-        last = Number(JSON.parse(lines[lines.length - 1]).id) || 0;
-      } catch {
-        last = lines.length;
-      }
-    }
+// El id se calcula leyendo la última línea del archivo justo antes de escribir, nunca desde
+// memoria: el canario y los experimentos son procesos distintos y un contador en memoria se
+// desincroniza (así se duplicaron los ids 588-1257; ver BITACORA). El candado de reset
+// serializa a los procesos mientras mandan sus secuencias.
+function ultimoId(): number {
+  if (!existsSync(LOG)) return 0;
+  const lineas = readFileSync(LOG, "utf8").trimEnd().split("\n");
+  const ultima = lineas[lineas.length - 1];
+  if (!ultima) return 0;
+  try {
+    return Number(JSON.parse(ultima).id) || lineas.length;
+  } catch {
+    return lineas.length;
   }
-  nextId = last + 1;
-  return nextId;
 }
 function appendLog(entry: Record<string, unknown>): number {
-  // síncrono: en un solo hilo, asigna id y escribe de forma atómica y en serie
-  const id = initId();
-  nextId = id + 1;
+  const id = ultimoId() + 1;
   appendFileSync(LOG, JSON.stringify({ id, ...entry }) + "\n");
   return id;
 }

@@ -25,7 +25,16 @@ const pad = (n: number) => String(n).padStart(4, "0");
 
 // El límite de TRANSFER es por operación (no acumulado) e inclusivo: 100000 pasa y 100001 falla
 // (ids 340-355); dos de 60000 seguidas pasan (360-361).
-const LIMITE_TRANSFER = 100000;
+// Versión 2 (incidente, detectado 16:01): el límite bajó de 100000 a 50000. 50000 pasa y 50001 falla
+// (ids de analisis/07_limite_v2.md); sigue siendo por transferencia, no acumulado.
+const LIMITE_TRANSFER = 50000;
+
+// Versión 2: el saldo se muestra como texto con 2 decimales, el valor interno entre 100
+// (40000 → "400.00", -800 → "-8.00", 12345 → "123.45"; ver analisis/06_cambios_v2_completa_1601.md).
+const formatoSaldo = (n: number): string => {
+  const abs = Math.abs(n);
+  return `${n < 0 ? "-" : ""}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
+};
 // Monto válido = entero sin ceros a la izquierda de hasta 10 dígitos: 9999999999 pasa (id 376),
 // 10000000000 falla (ids 393, 396, 399). Ceros a la izquierda, decimales y negativos fallan (ids 225-230).
 const MONTO_RE = /^[1-9]\d{0,9}$/;
@@ -122,7 +131,7 @@ const EJECUTAR: Record<string, (c: Ctx) => Resp> = {
     estado.cuentas.set(id, 0);
     return { status: 201, body: { cuentaId: id } };
   },
-  CONSULTA: (c) => ({ status: 200, body: { cuenta_id: c.args[0], saldo: estado.cuentas.get(c.args[0]) } }),
+  CONSULTA: (c) => ({ status: 200, body: { cuenta_id: c.args[0], saldo: formatoSaldo(estado.cuentas.get(c.args[0])!) } }),
   DEPOSITO: (c) => {
     const [cuenta, m] = [c.args[0], monto(c.args[1])];
     estado.cuentas.set(cuenta, estado.cuentas.get(cuenta)! + m);
