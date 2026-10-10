@@ -1,0 +1,19 @@
+Corrí `experimentos/13_cierre.ts`: 91 requests (ids 3439–3529) de un tope de 150. Después comparé con `DESDE_ID=3439` contra la réplica en el puerto 8099, que ya está apagada. Coinciden 86 de 91. Las 5 diferencias salen de 4 reglas que la réplica no tiene:
+
+| id | Original | Réplica | Regla |
+|---|---|---|---|
+| **3449** | `423 {"error":"E510","mensaje":"cuenta bloqueada","intentos":1}` | 200 | **Regla nueva, no estaba en la spec.** AC-0001 tuvo 3 rechazos por límite seguidos (E506, ids 3446–3448), y la transferencia siguiente desde esa cuenta salió bloqueada, aunque iba a una cuenta del mismo titular. CONSULTA sigue respondiendo. Las corridas del canario tienen 3 E506 en AC-0001, pero ninguna transferencia después, así que no la mostraron. |
+| 3450 | saldo `"9000.00"` | `"8499.99"` | Es consecuencia de la 3449: en el original esa transferencia no se ejecutó. |
+| **3493** | `PITA` sugiere `ALTA` | `PING` | Cuando dos comandos quedan a la misma distancia, gana el **orden alfabético**, no el de nuestra lista. |
+| **3494** | `HANG` sugiere `HALT` | `PING` | La misma regla: HALT va antes que PING. La regla de menor distancia sí coincide (AULA→ANULA, HALA→HALT, PALT→HALT). |
+| **3517** | control `00` da E202 | E201 | El control acepta cualquier par de dígitos (`^\d{1,2}$`), también `00`. Nuestra regla "sin cero a la izquierda" solo estaba probada con controles de 3 dígitos. |
+
+**Supuestos que ya eran correctos:**
+- **Titulares:** se comparan tal cual. `Ana`, `Ana `, ` Ana` y `Aná` son titulares distintos, y `7` es distinto de `07`. Sí cuentan como el mismo titular un espacio solo contra otro espacio, `123` contra `123` y `Aná` contra `Aná`. El nombre vacío no se puede probar: `ALTA;;c` da error de segmento vacío, por eso usé un espacio.
+- **Anular una transferencia de más de 50000 entre el mismo titular:** revierte normal, incluso si deja la cuenta destino en negativo.
+- **HALT:** con cualquier argumento responde E520 (`AC-0009`, `AC-0001`, `cualquiercosa`, `0`, minúsculas) y con 2 argumentos da error de aridad (E302). No mandé ninguna palabra de confirmación.
+- **Otros:** la autenticación (401) se evalúa antes que el cuerpo (400); el control `0` da E202; el saldo -50 se muestra como `"-0.50"`; `ac-0001` en minúsculas como destino da cuenta inexistente (E401), no "origen y destino iguales" (E304).
+
+**Lo más probable es que E510 explique buena parte de los 9 tests que caen más adelante en la secuencia.** No sé cuántos rechazos hacen falta para bloquear, si tienen que ser seguidos, qué cuenta `intentos` ni si el bloqueo afecta a DEPOSITO o al destino. Para averiguarlo hace falta otro experimento corto (unos 40 requests); el prompt pedía uno solo, así que no lo corrí sin tu visto bueno. Me queda presupuesto: el cálculo da 59 requests contando hasta el tope de 150. El desempate alfabético y el control `00` se arreglan con un cambio de una línea cada uno en `src/replica.ts`, que no toqué porque el prompt lo prohíbe.
+
+Dejé la tabla completa en `analisis/13_cierre.md`. No hice commit.

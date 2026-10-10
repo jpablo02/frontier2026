@@ -149,6 +149,12 @@ cantidad fija de argumentos. Si no coincide: `400` `{"error":"E302","mensaje":"a
 |---|---|---|---|
 | CMD-TRF-01 | `TRANSFER;<origen>;<destino>;<monto>;<c>` resta del origen y suma al destino → `200` `{"status":"recieved","operacionId":"OP-NNNN"}` | 8, 9, 11, 12, 487, 488, 490, 491 | confirmado |
 | CMD-TRF-02 | **(v2, vigente)** Límite por operación de **50000**, inclusivo, **solo entre cuentas de titulares distintos**: 49999 y 50000 pasan; 50001, 55000 y 59999 dan `422` `{"error":"E506","mensaje":"límite excedido"}` | 2347, 2352, 2357, 2362, 2367 | confirmado |
+| CMD-TRF-12 | **Bloqueo por intentos:** con **3 rechazos consecutivos por límite (E506)** desde la misma cuenta origen, la siguiente transferencia desde esa cuenta responde `423` `{"error":"E510","mensaje":"cuenta bloqueada","intentos":<n>}`. Con 1 o 2 rechazos no bloquea | 3534, 3540, 3547-3550 | confirmado |
+| CMD-TRF-13 | El campo `intentos` cuenta los intentos hechos **ya estando bloqueada**: empieza en 1 y sube con cada uno | 3558, 3559, 3560 | confirmado |
+| CMD-TRF-14 | Una transferencia **válida reinicia la racha**: 2 rechazos, una válida y 1 rechazo más no bloquean | 3565-3569 | confirmado |
+| CMD-TRF-15 | Los rechazos por **saldo insuficiente (E507) no cuentan** para el bloqueo: 3 seguidos no bloquean | 3573-3577 | confirmado |
+| CMD-TRF-16 | El bloqueo afecta **solo al envío**: con la cuenta bloqueada, CONSULTA, DEPOSITO y recibir una transferencia siguen funcionando | 3585-3589 | confirmado |
+| CMD-TRF-17 | El bloqueo **persiste** mientras no haya reset; se evalúa antes que el límite y que el saldo | 3597, 3598 | confirmado |
 | CMD-TRF-09 | **(v2, cambio 3 del incidente)** Si origen y destino tienen **el mismo titular**, el límite no aplica: con saldo suficiente pasan 50001 y hasta 999999999 | 3114, 3115, 3129 | confirmado |
 | CMD-TRF-10 | El titular se compara **tal cual, distinguiendo mayúsculas**: `Ana` y `ANA` son titulares distintos y la transferencia da E506 | 3134 | probable |
 | CMD-TRF-11 | La excepción no salta las demás validaciones: mismo titular sin saldo da E507, no E506 | 2921, 3124 | confirmado |
@@ -229,6 +235,7 @@ comando.
 | 11d | E506 | 422 | `{"error":"E506","mensaje":"límite excedido"}` | TRANSFER | 10, 340 |
 | 11e | E507 | 422 | `{"error":"E507","mensaje":"saldo insuficiente"}` | TRANSFER | 17, 380 |
 | 11f | E402 | 404 | `{"error":"E402","mensaje":"operación inexistente"}` | ANULA | 248, 251 |
+| 11h | E510 | 423 | `{"error":"E510","mensaje":"cuenta bloqueada","intentos":<n>}` | TRANSFER desde una cuenta bloqueada | 3550, 3558 |
 | 11g | E520 | 409 | `{"error":"E520","mensaje":"operación destructiva: detiene el servicio; reenvía con confirmación"}` | HALT con 1 argumento | 2518 |
 | — | — | 200 | `{"ok":false,"motivo":"ya anulada"}` | ANULA repetido (no es error HTTP) | 15, 465, 494 |
 

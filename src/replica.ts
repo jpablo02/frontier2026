@@ -14,11 +14,15 @@ if (!TOKEN) {
 type Op =
   | { tipo: "DEPOSITO"; cuenta: string; monto: number; anulada: boolean }
   | { tipo: "TRANSFER"; origen: string; destino: string; monto: number; anulada: boolean };
-const estado = { cuentas: new Map<string, number>(), titulares: new Map<string, string>(), ops: new Map<string, Op>(), nCuentas: 0, nOps: 0 };
+// `rechazos`: E506 consecutivos por cuenta origen; a los 3 la cuenta queda bloqueada como origen.
+// `bloqueos`: cuántos intentos se rechazaron ya estando bloqueada (el campo `intentos` de E510).
+const estado = { cuentas: new Map<string, number>(), titulares: new Map<string, string>(), ops: new Map<string, Op>(), rechazos: new Map<string, number>(), bloqueos: new Map<string, number>(), nCuentas: 0, nOps: 0 };
 function reset() {
   estado.cuentas.clear();
   estado.titulares.clear();
   estado.ops.clear();
+  estado.rechazos.clear();
+  estado.bloqueos.clear();
   estado.nCuentas = 0;
   estado.nOps = 0;
 }
@@ -76,9 +80,11 @@ function distancia(a: string, b: string): number {
 }
 
 function sugerir(cmd: string): string | undefined {
+  // En los empates de distancia gana el orden alfabético, no el de esta lista:
+  // PITA sugiere ALTA (no PING) y HANG sugiere HALT (ids 3493, 3494).
   let mejor: string | undefined;
   let mejorD = Infinity;
-  for (const c of COMANDOS_CONOCIDOS) {
+  for (const c of [...COMANDOS_CONOCIDOS].sort()) {
     const d = distancia(cmd, c);
     if (d < mejorD) { mejorD = d; mejor = c; }
   }
@@ -107,7 +113,9 @@ const PASOS_MENSAJE: Paso[] = [
     chequeo: (c) => {
       c.ctrl = c.segs[c.segs.length - 1];
       if (c.segs[0].toUpperCase() === "PING") return false; // PING ignora el formato del control (id 2555)
-      return !/^(0|[1-9]\d?)$/.test(c.ctrl);
+      // 1 o 2 dígitos, incluido "00": el cero a la izquierda sí se acepta con 2 dígitos (id 3517);
+      // los de 3 dígitos siguen dando E201 (ids 163, 171).
+      return !/^\d{1,2}$/.test(c.ctrl);
     },
   },
   {
@@ -148,14 +156,31 @@ const PASOS_COMANDO: Record<string, Paso[]> = {
     { codigo: "E304", status: 400, mensaje: "origen y destino iguales", chequeo: (c) => c.args[0] === c.args[1] },
     { codigo: "E401", status: 404, mensaje: "cuenta inexistente", chequeo: (c) => cuentaNo(c.args[0]) || cuentaNo(c.args[1]) },
     // Límite (E506) antes que saldo (E507) (id 419); cuenta inexistente antes que límite (id 423).
+    // Bloqueo por intentos: con 3 E506 consecutivos desde la misma cuenta origen, la siguiente
+    // transferencia desde esa cuenta responde 423 E510 con `intentos` (ids 3547-3550). Reinician
+    // con una transferencia válida (3565-3569); los E507 no cuentan (3573-3577); el bloqueo solo
+    // afecta a enviar: consultar, depositar y recibir siguen bien (3585-3589).
+    {
+      codigo: "E510", status: 423, mensaje: "cuenta bloqueada",
+      chequeo: (c) => (estado.rechazos.get(c.args[0]) ?? 0) >= 3,
+      extra: (c) => {
+        const n = (estado.bloqueos.get(c.args[0]) ?? 0) + 1;
+        estado.bloqueos.set(c.args[0], n);
+        return { intentos: n };
+      },
+    },
     // v2: el límite NO aplica si origen y destino tienen el mismo titular, comparado tal cual
     // (distingue mayúsculas): mismo titular con saldo pasa 50001 y hasta 999999999 (ids 3114, 3129);
     // distinto titular da E506 (3120); "Ana" vs "ANA" son titulares distintos (3134). Descubierto
     // con el id 2921, la única diferencia en 248 líneas aleatorias.
     {
       codigo: "E506", status: 422, mensaje: "límite excedido",
-      chequeo: (c) => monto(c.args[2]) > LIMITE_TRANSFER &&
-        estado.titulares.get(c.args[0]) !== estado.titulares.get(c.args[1]),
+      chequeo: (c) => {
+        const excede = monto(c.args[2]) > LIMITE_TRANSFER &&
+          estado.titulares.get(c.args[0]) !== estado.titulares.get(c.args[1]);
+        if (excede) estado.rechazos.set(c.args[0], (estado.rechazos.get(c.args[0]) ?? 0) + 1);
+        return excede;
+      },
     },
     { codigo: "E507", status: 422, mensaje: "saldo insuficiente", chequeo: (c) => estado.cuentas.get(c.args[0])! < monto(c.args[2]) },
   ],
@@ -189,6 +214,7 @@ const EJECUTAR: Record<string, (c: Ctx) => Resp> = {
   },
   TRANSFER: (c) => {
     const [origen, destino, m] = [c.args[0], c.args[1], monto(c.args[2])];
+    estado.rechazos.set(origen, 0); // una transferencia válida reinicia la racha (ids 3565-3569)
     estado.cuentas.set(origen, estado.cuentas.get(origen)! - m);
     estado.cuentas.set(destino, estado.cuentas.get(destino)! + m);
     return { status: 200, body: { status: "recieved", operacionId: nuevaOp({ tipo: "TRANSFER", origen, destino, monto: m, anulada: false }) } };
