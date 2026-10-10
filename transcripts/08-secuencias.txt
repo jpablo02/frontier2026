@@ -1,0 +1,25 @@
+El original respondió igual que nuestra réplica en todo. Ninguna de las 14 secuencias encontró una diferencia.
+
+Usé **183 requests** de un tope de 200 (ids 2625–2807), con una sola ejecución. En ese rango no se coló ninguna línea del canario. Para comparar, levanté `src/replica.ts` en local (puerto 8099) y le pasé el log con `DESDE_ID=2625 node --env-file=.env src/diff.ts http://localhost:8099`. Dio **183/183 líneas y 14/14 secuencias iguales**. Al terminar apagué la réplica.
+
+**Hipótesis descartadas (el original se comporta como la réplica):**
+- **s01, cadena A→B→C→A:** los saldos se acumulan bien (2633–2635).
+- **s02, anular y volver a transferir:** se puede transferir otra vez lo anulado y la anulación no gasta número de operación: la siguiente es OP-0003 (2647). Anular dos veces da `ya anulada` (2650).
+- **s03 y s04, anular en orden inverso y en orden directo:** los dos terminan en cero. En orden directo los saldos pasan por negativos (`"-3.00"` en 2672, `"-2.00"` en 2674).
+- **s05, transferir desde una cuenta negativa:** da E507 hasta que el saldo vuelve a alcanzar (2683, 2686, 2688).
+- **s06, cuenta intermedia en negativo:** sigue recibiendo y se recupera al anular (2697–2705).
+- **s07, 10 depósitos mezclados:** suman exacto, `"100000514.78"` (2719). Al anular el más grande queda `"514.79"` (2721).
+- **s08, 9 errores intercalados:** ni esos errores (E202, E301, E302, E303, E304, E401, E506, E507, y el E520 de HALT) ni un `PING;XX` cambian el saldo ni los contadores. El siguiente depósito es OP-0002 y la siguiente cuenta AC-0003 (2737–2739).
+- **s09, contadores de cuentas y operaciones intercalados:** anular un número de operación que se rechazó da E402 (2748). Después de un reset, anular da E402 (2741).
+- **s10, límite con 4 cuentas:** sigue siendo por operación. Siete transferencias de 50000 entre 4 cuentas pasan y 50001 da E506 (2759–2771).
+- **s11, saldo exacto tras dos depósitos:** transferir 1 de más da E507 y el monto exacto pasa (2778–2780).
+- **s12, depósito máximo gastado y anulado:** queda `"-500.00"` y después `"99999499.99"` (2789, 2791).
+- **s13, sugerencias:** el límite de 2 letras de diferencia también vale en palabras cortas (`PI`→PING, `AL`→ALTA). `consultar` en minúsculas sugiere `CONSULTA` y `TRANSFERENCIA` no sugiere nada (2796–2802).
+- **s14, PING y control:**
+  - `PING;AC-0001;XX` da E302 aunque el control esté mal formado (2804).
+  - `ping;XX` y `PING;-1` dan 200 (2805–2806).
+  - Un control `0` da E202 (2807), así que el supuesto INT-14 queda confirmado con una línea.
+
+**Lo que esto no aclara:** cuando dos comandos empatan, gana ALTA en los cuatro casos: ALT, HALTA y AL entre ALTA y HALT, y ATLA entre ALTA y ANULA (2797–2800). Coincide con el orden de la lista de la réplica, pero también con el orden alfabético, y este experimento no permite saber cuál de las dos reglas usa el original.
+
+Por seguridad volví a mandar solo el `HALT;AC-0001` que ya se había probado sin efecto en la ronda anterior; nunca mandé la confirmación. No toqué `src/replica.ts` ni `ESPECIFICACION.md` y no hice commit. Los archivos nuevos son `experimentos/09_secuencias.ts` y `analisis/09_secuencias.md`, que tiene la tabla y la comparación.
