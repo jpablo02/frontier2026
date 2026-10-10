@@ -1,0 +1,8 @@
+#!/bin/sh
+# Bloquea commits que contengan keys o archivos .env
+if git diff --cached --name-only | grep -E '(^|/)\.env($|\.[^e])' >/dev/null; then
+  echo "BLOQUEADO: intentas commitear un archivo .env" >&2; exit 1
+fi
+if git diff --cached -U0 | grep -E '^\+.*(sk-or-v1-[A-Za-z0-9]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})' >/dev/null; then
+  echo "BLOQUEADO: posible API key en el diff" >&2; exit 1
+fi

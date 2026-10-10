@@ -1,0 +1,21 @@
+node_modules/
+dist/
+*.log
+
+# secretos y contexto privado: nunca versionar
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+CLAUDE.local.md
+INICIO_AQUI*.md
+
+# sesiones de agentes (pueden contener datos sensibles)
+.pi/sessions/
+sess/
+*.jsonl
+
+# SO
+.DS_Store
+Thumbs.db
