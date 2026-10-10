@@ -10,9 +10,13 @@ const v1: Linea[] = readFileSync(new URL("../experimentos.jsonl", import.meta.ur
 
 // Solo lo registrado antes del incidente; las vueltas del canario se repiten entre sí, basta una.
 const LIMITE_ID = Math.max(...v1.filter((l) => l.seq.startsWith("juan-")).map((l) => l.id));
+// SOLO=seq1,seq2 repite únicamente esas secuencias (revisión rápida y barata).
+const SOLO = process.env.SOLO ? new Set(process.env.SOLO.split(",")) : null;
+const SALIDA = process.env.SALIDA ?? "06_cambios_v2.md";
 const seqs = new Map<string, Linea[]>();
 for (const l of v1) {
   if (l.id > LIMITE_ID) continue;
+  if (SOLO && !SOLO.has(l.seq)) continue;
   if (l.seq.startsWith("canary-") && l.seq !== "canary-1450") continue;
   if (!seqs.has(l.seq)) seqs.set(l.seq, []);
   seqs.get(l.seq)!.push(l);
@@ -41,7 +45,7 @@ for (const [seq, lineas] of seqs) {
   }
 }
 
-writeFileSync(new URL("../analisis/06_cambios_v2.md", import.meta.url),
+writeFileSync(new URL(`../analisis/${SALIDA}`, import.meta.url),
   `# Cambios de la versión 2 (incidente 15:30)\n\nSe repitieron ${total} requests de la versión 1. Diferencias: ${cambios.length}.\n\n` +
   `| id v1 | id v2 | request | respuesta v1 | respuesta v2 |\n|---|---|---|---|---|\n${cambios.join("\n")}\n`);
 console.log(`repetidos: ${total} · diferencias: ${cambios.length} · ver analisis/06_cambios_v2.md`);
