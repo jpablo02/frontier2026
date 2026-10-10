@@ -1,0 +1,24 @@
+La segunda ronda no encontró **ninguna diferencia**: la réplica coincidió con el original en las 277 respuestas, status y cuerpo incluidos (20/20 secuencias perfectas). Pero tiene un hueco de cobertura: no se ejecutó ninguna transferencia de más de 50000 entre cuentas del mismo titular, que es justo lo que más nos interesaba.
+
+**Volumen:** 277 requests en 20 secuencias (`alea2-01`…`alea2-20`), ids **3162–3438**: 20 resets más 257 mensajes, de 10 a 16 por secuencia. Corrí el generador una sola vez contra el original; antes lo probé en seco con `SIMULAR=1`, sin mandar nada. En ese rango no se coló ninguna línea del canario, y la réplica en el puerto 8099 quedó apagada.
+
+**Regla nueva:** como no hubo diferencias, no hay ninguna que deducir.
+
+**Lo que sí quedó confirmado sobre los titulares:**
+- **El límite no aplica con el mismo titular:** 22 transferencias de más de 50000 entre cuentas del mismo titular, en ambos sentidos, dieron E507 (saldo) y no E506 (límite). Como el original revisa el límite antes que el saldo, eso confirma 22 veces que se salta el límite.
+- **El nombre se compara tal cual:** `José` contra `JOSÉ` (id 3168) y `Ana  Maria` contra `Ana Maria` (id 3183) dieron E506. Es decir, el original no iguala mayúsculas ni espacios internos dobles.
+- **Cuentas repetidas:** salieron 12 grupos de 3 o más cuentas con el mismo titular, y la réplica dio lo mismo en todos.
+
+**Lo que quedó sin probar:**
+1. **Transferencias sobre el límite con saldo:** el generador mandaba los depósitos en cualquier orden, casi siempre después de la transferencia o a otra cuenta. Por eso las 22 de más de 50000 entre mismo titular quedaron en E507, y las únicas 5 transferencias que salieron bien eran de 50000 o menos.
+2. **Anulaciones:** solo una cayó sobre una transferencia (id 3216, titular distinto). La anulación de una transferencia de más de 50000 entre mismo titular no se probó.
+3. **Variantes de nombre:** casi no salieron. Muchos nombres reutilizados (`123`, `x`, `0`) no cambian con mayúsculas ni tildes, así que no aparecieron `ana`, ` Ana` ni `Añá`. El único par con espacio al final (`Beto` contra `Beto `, id 3390) era de 50000, que no supera el límite, así que no dice si el original quita esos espacios.
+
+Para cerrar esos tres puntos convendría un experimento dirigido de unos 20 requests, no otra ronda aleatoria. Primero se deposita; luego se prueba 50001 con `Ana`/`Ana `, `Ana`/` Ana` y `Ana`/`Aná`. Por último se anula una de 50001 entre mismo titular y se consultan los dos saldos. No lo corrí: gasta cuota y lo decides tú.
+
+No hice commit ni toqué `src/replica.ts` ni `ESPECIFICACION.md`.
+
+Archivos nuevos:
+- `experimentos/12_aleatorias2.ts`
+- `analisis/12_aleatorias2.md` (tabla, cobertura y los huecos)
+- `analisis/12_aleatorias2_corrida.md` (corrida paso a paso)
