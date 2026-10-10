@@ -23,11 +23,11 @@ function reset() {
 }
 const pad = (n: number) => String(n).padStart(4, "0");
 
-// SUPUESTO: el límite de TRANSFER es por operación (no acumulado) e inclusivo: 100000 pasa (ej. 10),
-// 120000 no (ej. 9). El corte exacto entre 100001 y 119999 no está medido.
+// El límite de TRANSFER es por operación (no acumulado) e inclusivo: 100000 pasa y 100001 falla
+// (ids 340-355); dos de 60000 seguidas pasan (360-361).
 const LIMITE_TRANSFER = 100000;
 // Monto válido = entero sin ceros a la izquierda de hasta 10 dígitos: 9999999999 pasa (id 376),
-// 10000000000 falla (ids 392-399). Ceros a la izquierda, decimales y negativos fallan (ids 225-230).
+// 10000000000 falla (ids 393, 396, 399). Ceros a la izquierda, decimales y negativos fallan (ids 225-230).
 const MONTO_RE = /^[1-9]\d{0,9}$/;
 
 // ---------- pipeline de validación ----------
@@ -84,8 +84,7 @@ const PASOS_MENSAJE: Paso[] = [
 const monto = (s: string) => Number(s);
 const cuentaNo = (s: string) => !estado.cuentas.has(s);
 // Validaciones propias de cada comando, también en orden.
-// SUPUESTO: dentro de un comando, formato de monto (E303) antes que existencia de cuenta (E401); los datos
-// solo muestran cada error por separado.
+// Orden dentro de un comando: E303 → E304 → E401 → E506 → E507 (ids 403-431).
 const PASOS_COMANDO: Record<string, Paso[]> = {
   PING: [],
   ALTA: [],
@@ -96,10 +95,10 @@ const PASOS_COMANDO: Record<string, Paso[]> = {
   ],
   TRANSFER: [
     { codigo: "E303", status: 400, mensaje: "monto inválido", chequeo: (c) => !MONTO_RE.test(c.args[2]) },
-    // SUPUESTO: E304 antes que E401 (ej. AC-0009→AC-0009 no medido).
+    // E304 antes que E401 (id 411); E303 antes que E304 (id 415).
     { codigo: "E304", status: 400, mensaje: "origen y destino iguales", chequeo: (c) => c.args[0] === c.args[1] },
     { codigo: "E401", status: 404, mensaje: "cuenta inexistente", chequeo: (c) => cuentaNo(c.args[0]) || cuentaNo(c.args[1]) },
-    // SUPUESTO: límite (E506) antes que saldo (E507); ningún dato tiene ambos a la vez.
+    // Límite (E506) antes que saldo (E507) (id 419); cuenta inexistente antes que límite (id 423).
     { codigo: "E506", status: 422, mensaje: "límite excedido", chequeo: (c) => monto(c.args[2]) > LIMITE_TRANSFER },
     { codigo: "E507", status: 422, mensaje: "saldo insuficiente", chequeo: (c) => estado.cuentas.get(c.args[0])! < monto(c.args[2]) },
   ],
@@ -141,7 +140,7 @@ const EJECUTAR: Record<string, (c: Ctx) => Resp> = {
     if (op.anulada) return { status: 200, body: { ok: false, motivo: "ya anulada" } };
     op.anulada = true;
     // Revierte el efecto (ej. 13→19: el destino vuelve a 40000 + 700).
-    // SUPUESTO: la reversión se aplica aunque deje saldo negativo.
+    // La reversión se aplica aunque deje saldo negativo (ids 440, 447).
     if (op.tipo === "DEPOSITO") estado.cuentas.set(op.cuenta, estado.cuentas.get(op.cuenta)! - op.monto);
     else {
       estado.cuentas.set(op.origen, estado.cuentas.get(op.origen)! + op.monto);
