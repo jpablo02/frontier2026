@@ -1,0 +1,27 @@
+{
+  "name": "frontier2026",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jpablo02/frontier2026.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/jpablo02/frontier2026/issues"
+  },
+  "homepage": "https://github.com/jpablo02/frontier2026#readme",
+  "private": true,
+  "engines": {
+    "node": ">=22.19"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.0"
+  }
+}
