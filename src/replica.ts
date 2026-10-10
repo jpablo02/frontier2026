@@ -169,6 +169,10 @@ const RUTAS: Record<string, (raw: string) => Resp> = {
   "GET /health": () => ({ status: 200, body: { ok: true } }),
 };
 
+// Un error imprevisto no debe tumbar el proceso: perdería el estado a mitad de una prueba.
+process.on("uncaughtException", (e) => console.error("uncaughtException:", e));
+process.on("unhandledRejection", (e) => console.error("unhandledRejection:", e));
+
 createServer((req, res) => {
   const chunks: Buffer[] = [];
   req.on("data", (d) => chunks.push(d));
@@ -177,7 +181,15 @@ createServer((req, res) => {
     let r: Resp;
     if (!ruta) r = NO_ENCONTRADA; // ruta/método desconocido: 404 sin mirar la auth (ids 58-73, 75-136)
     else if (req.headers.authorization !== `Bearer ${TOKEN}`) r = NO_AUTORIZADO;
-    else r = ruta(Buffer.concat(chunks).toString("utf8"));
+    else {
+      try {
+        r = ruta(Buffer.concat(chunks).toString("utf8"));
+      } catch (e) {
+        // SUPUESTO: el original nunca mostró un 500; esto solo evita que un caso imprevisto tumbe el proceso.
+        console.error("error interno:", e);
+        r = { status: 500, body: { error: "E500", mensaje: "error interno" } };
+      }
+    }
     res.writeHead(r.status, { "content-type": "application/json; charset=utf-8" });
     res.end(JSON.stringify(r.body));
   });
