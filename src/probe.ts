@@ -12,7 +12,8 @@ export interface SendOpts {
   method?: string;
   path?: string;
   body?: unknown;
-  auth?: "ok" | "none" | string;
+  auth?: "ok" | "none" | "team" | "raw" | "lower" | string;
+  contentType?: string | null;
   conclusion?: string;
 }
 export interface SendResult {
@@ -23,11 +24,13 @@ export interface SendResult {
   xReq: number | string | null;
 }
 
-function token(): string {
-  const t = process.env.CAJA_NEGRA_TOKEN;
-  if (!t) throw new Error("Falta CAJA_NEGRA_TOKEN (ejecuta con node --env-file=.env)");
+function token(name = "CAJA_NEGRA_TOKEN"): string {
+  const t = process.env[name];
+  if (!t) throw new Error(`Falta ${name} (ejecuta con node --env-file=.env)`);
   return t;
 }
+
+const AUTH_MODES = ["ok", "none", "team", "raw", "lower"];
 
 // --- cola global de velocidad ---
 let nextSlot = 0;
@@ -78,6 +81,9 @@ export async function send(opts: SendOpts): Promise<SendResult> {
   const auth = opts.auth ?? "ok";
   const headers: Record<string, string> = {};
   if (auth === "ok") headers.Authorization = `Bearer ${token()}`;
+  else if (auth === "team") headers.Authorization = `Bearer ${token("TEAM_TOKEN")}`;
+  else if (auth === "raw") headers.Authorization = token();
+  else if (auth === "lower") headers.Authorization = `bearer ${token()}`;
   else if (auth !== "none") headers.Authorization = auth;
 
   let payload: string | undefined;
@@ -88,6 +94,8 @@ export async function send(opts: SendOpts): Promise<SendResult> {
       headers["Content-Type"] = "application/json";
     }
   }
+  if (opts.contentType === null) delete headers["Content-Type"];
+  else if (opts.contentType !== undefined) headers["Content-Type"] = opts.contentType;
 
   let res: Response | undefined;
   let raw = "";
@@ -122,7 +130,8 @@ export async function send(opts: SendOpts): Promise<SendResult> {
     conclusion: opts.conclusion ?? "",
     metodo: method,
     ruta: path,
-    auth: auth === "ok" ? "ok" : auth === "none" ? "none" : "custom",
+    auth: AUTH_MODES.includes(auth) ? auth : "custom",
+    content_type_resp: res.headers.get("Content-Type"),
     ts: new Date().toISOString(),
   });
   return { id, status: res.status, raw, json, xReq };
