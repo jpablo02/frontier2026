@@ -46,28 +46,40 @@ pisarse. El número puede estar subestimado y no sabemos cuánto.
 **Verificación local antes de la corrida 2:** 1.015 / 1.015 líneas y 105 / 105 secuencias contra
 todo lo observado de la versión 2.
 
-## Corrida 2 — pendiente
+## Corrida 2 — 17:42
 
-| Métrica | Valor |
-|---|---|
-| Total | |
-| Fáciles | / 40 |
-| Regulares | / 40 |
-| Difíciles | / 20 |
-| Fallan por status distinto | |
-| Fallan por cuerpo distinto | |
-| Caen en el primer request | |
-| Caen más adelante en la secuencia | |
+| Métrica | Corrida 1 (14:19) | Corrida 2 (17:42) | Cambio |
+|---|---|---|---|
+| **Total** | 60 / 100 | **87 / 100** | **+27** |
+| Fáciles | 34 / 40 | **40 / 40** | +6 (perfecto) |
+| Regulares | 23 / 40 | 36 / 40 | +13 |
+| Difíciles | 3 / 20 | 11 / 20 | +8 |
+| Fallan por status distinto | 22 | 10 | −12 |
+| Fallan por cuerpo distinto | 18 | 3 | −15 |
+| Caen en el primer request | 17 | 4 | −13 |
+| Caen más adelante en la secuencia | 23 | 9 | −14 |
+| Mediana por caso | 303 ms | 316 ms | sin cambio relevante |
 
-**Qué mirar al compararla con la corrida 1:**
+**Lectura.** Los 7 cambios aplicados cubrieron casi todo lo que fallaba:
 
-- Si **difíciles** sigue bajo, el problema está en el estado de las secuencias largas, no en reglas
-  sueltas.
-- Si **"caen en el primer request"** baja mucho, los cambios 4, 5 y 6 (sugerencias, HALT, PING)
-  estaban en varios tests de un solo mensaje.
-- Si **"status distinto"** baja y "cuerpo distinto" no, falta afinar textos exactos, no reglas.
-- Si el total **no sube**, los 7 cambios no tocaban lo que el set prueba, y hay que buscar en otra
-  parte.
+- **Fáciles al 100%:** las sugerencias por distancia de edición, HALT y PING (los tests de un solo
+  mensaje) estaban en el grupo que fallaba. "Caen en el primer request" bajó de 17 a 4.
+- **Difíciles de 3 a 11:** el tercer cambio del incidente (el límite no aplica entre cuentas del
+  mismo titular) era lo que rompía las secuencias largas, como se sospechaba.
+- **"Cuerpo distinto" casi desaparece** (18 → 3): el formato del saldo como string con 2 decimales
+  explicaba la mayoría.
+- Quedan **13 tests fallando**: 10 por status distinto y 3 por cuerpo. De ellos, 4 caen en el primer
+  request y 9 más adelante.
+
+**Dónde está el resto.** Con 4 fallos en tests de un solo mensaje y 10 por status, lo más probable
+es que queden reglas de borde no medidas. Candidatas, todas marcadas hoy como supuesto o probable
+en la especificación:
+
+1. Desempate de sugerencias cuando dos comandos quedan a la misma distancia (CMD-DES-09).
+2. Validación del argumento de `HALT` y la confirmación que pide E520 (CMD-DES-08).
+3. Comparación de titulares con espacios al inicio o final, que la segunda ronda aleatoria no
+   alcanzó a probar con saldo suficiente.
+4. Transición de `AC-9999` a `AC-10000` (CMD-ALTA-06).
 
 ## Corrida 3 — pendiente (reservada para ~19:30)
 
