@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node src/replica.ts",
+    "diff": "node --env-file=.env src/diff.ts"
   },
   "repository": {
     "type": "git",
@@ -19,7 +20,7 @@
   "homepage": "https://github.com/jpablo02/frontier2026#readme",
   "private": true,
   "engines": {
-    "node": ">=22.19"
+    "node": "24.x"
   },
   "devDependencies": {
     "playwright": "^1.64.0"
