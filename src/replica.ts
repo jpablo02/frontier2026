@@ -26,8 +26,9 @@ const pad = (n: number) => String(n).padStart(4, "0");
 // SUPUESTO: el límite de TRANSFER es por operación (no acumulado) e inclusivo: 100000 pasa (ej. 10),
 // 120000 no (ej. 9). El corte exacto entre 100001 y 119999 no está medido.
 const LIMITE_TRANSFER = 100000;
-// SUPUESTO: monto válido = entero sin ceros a la izquierda de hasta 9 dígitos (999999999999 falla, 500000 pasa).
-const MONTO_RE = /^[1-9]\d{0,8}$/;
+// Monto válido = entero sin ceros a la izquierda de hasta 10 dígitos: 9999999999 pasa (id 376),
+// 10000000000 falla (ids 392-399). Ceros a la izquierda, decimales y negativos fallan (ids 225-230).
+const MONTO_RE = /^[1-9]\d{0,9}$/;
 
 // ---------- pipeline de validación ----------
 type Resp = { status: number; body: unknown };
