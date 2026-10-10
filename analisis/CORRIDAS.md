@@ -81,6 +81,41 @@ en la especificación:
    alcanzó a probar con saldo suficiente.
 4. Transición de `AC-9999` a `AC-10000` (CMD-ALTA-06).
 
-## Corrida 3 — pendiente (reservada para ~19:30)
+## Corrida 3 — 18:49
 
-Verificación final del despliegue, después de aplicar lo que enseñe la corrida 2.
+| Métrica | Corrida 2 (17:42) | Corrida 3 (18:49) |
+|---|---|---|
+| **Total** | 87 / 100 | **87 / 100** |
+| Fáciles | 40 / 40 | 40 / 40 |
+| Regulares | 36 / 40 | 36 / 40 |
+| Difíciles | 11 / 20 | 11 / 20 |
+| Fallan por status distinto | 10 | 11 |
+| Fallan por cuerpo distinto | 3 | 2 |
+| Caen en el primer request | 4 | 4 |
+| Caen más adelante en la secuencia | 9 | 9 |
+
+**Cambios aplicados entre la corrida 2 y la 3:**
+
+| # | Cambio | Evidencia |
+|---|---|---|
+| 8 | Bloqueo de cuenta tras 3 rechazos consecutivos por límite (E510, 423) | 3547-3550, 3558-3560 |
+| 9 | Desempate de sugerencias por orden alfabético, no por el orden de la lista | 3493, 3494 |
+| 10 | El control acepta `00` y cualquier par de dígitos | 3517 |
+
+**Lectura: los tres cambios no movieron el total.** El set oculto no prueba esas reglas, o las prueba
+dentro de casos que ya fallaban por otro motivo. Un test pasó de fallar por cuerpo a fallar por
+status, lo que sugiere que alguna respuesta quedó más cerca pero no exacta.
+
+**Qué descarta esto.** Los 13 tests que fallan no dependen del bloqueo por intentos, del desempate de
+sugerencias ni del formato del control. Tampoco de nada medido entre las 17:42 y las 18:49.
+
+**Dónde quedaría por mirar, si hubiera más tiempo:** los 9 que caen a mitad de secuencia apuntan a
+una regla de estado que no hemos observado; los 11 por status distinto, a códigos HTTP de casos de
+borde. Las zonas sin medir que siguen marcadas como supuesto en la especificación son el lugar por
+donde seguiría: la confirmación que pide `HALT` (E520), la transición de `AC-9999` a `AC-10000`, y
+el comportamiento con cuerpos o cabeceras que no probamos.
+
+**Valor del experimento:** las tres corridas, con sus desgloses, muestran exactamente qué familia de
+cambios produjo cada salto: de 60 a 87 con los tres cambios del incidente más las reglas de
+comandos, y de 87 a 87 con las reglas de bloqueo y formato. Es evidencia directa de qué hipótesis
+eran correctas y cuáles no tocaban el set.
