@@ -14,7 +14,7 @@ INICIO_AQUI*.md
 # sesiones de agentes (pueden contener datos sensibles)
 .pi/sessions/
 sess/
-*.jsonl
+.pi/**/*.jsonl
 
 # SO
 .DS_Store
