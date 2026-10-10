@@ -1,0 +1,28 @@
+Encontré una sola diferencia entre el original y la réplica en 248 líneas. La más probable de las explicaciones: en la v2, una transferencia entre dos cuentas con el mismo nombre de titular no pasa por el límite de 50000.
+
+**Uso:** 248 requests (25 resets + 223 mensajes) en 25 secuencias `alea-01`…`alea-25`, ids **2862–3109**. El script se ejecutó una sola vez y el canario no metió líneas en ese rango. Antes probé el generador con un envío simulado, sin red, para no gastar cuota si tenía un error.
+
+**Comparación con la réplica en el puerto 8099 (ya apagada):** 247/248 iguales (99.6%); 24 de 25 secuencias coinciden completas.
+
+**La diferencia: id 2921, secuencia `alea-06`, paso 7 de 9**
+- Pasos previos: se crearon `AC-0002` y `AC-0003` con el mismo nombre (`ALTA;Ana` dos veces) y se depositó 100 en `AC-0001`.
+- Mensaje: `TRANSFER;AC-0003;AC-0002;50001;26`, con saldo 0 en el origen.
+- Original: `422 {"error":"E507","mensaje":"saldo insuficiente"}`
+- Réplica: `422 {"error":"E506","mensaje":"límite excedido"}`
+
+**Regla deducida (probable, sale de una sola línea):**
+- Revisé las 28 transferencias de la v2 con monto mayor a 50000. En 27 el original da E506 aunque el saldo sea 0 (por ejemplo, el id 2972: `50001`, saldo 0, E506). El orden de los errores no cambió.
+- Lo único que distingue al id 2921 es que el origen y el destino tienen el mismo titular.
+- En la v1 no hubo ninguna transferencia entre cuentas de nombre repetido. Por eso este podría ser el **tercer cambio de la v2 que no habíamos encontrado**. "Nombres repetidos en ALTA" ya era una de las zonas candidatas en la especificación.
+- Explica también por qué la réplica falla a mitad de secuencia: hacen falta dos altas con el mismo nombre antes de la transferencia, y eso no ocurrió en ninguna de las 14 secuencias escritas a mano.
+
+**Lo que no se puede saber todavía:** si entre cuentas del mismo titular no hay límite o hay otro, por ejemplo 100000 como en la v1. Tampoco si la comparación de nombres distingue mayúsculas o tildes. En `analisis/10_aleatorias.md` dejé propuesto, sin ejecutar, un experimento de unos 10 requests que lo resuelve.
+
+Por seguridad, `HALT` solo se mandó con 0 o 1 argumento: su error pide "reenvía con confirmación" y podría detener el servicio.
+
+No toqué `src/replica.ts` ni `ESPECIFICACION.md`, y no hice commit.
+
+Archivos:
+- `experimentos/10_aleatorias.ts`
+- `analisis/10_aleatorias.md` (tabla de resultados, la diferencia, la regla y las decisiones con la alternativa descartada)
+- `analisis/10_aleatorias_corrida.md` (detalle paso a paso de las 248 líneas)

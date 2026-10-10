@@ -148,7 +148,10 @@ cantidad fija de argumentos. Si no coincide: `400` `{"error":"E302","mensaje":"a
 | ID | Comportamiento | Evidencia | Confianza |
 |---|---|---|---|
 | CMD-TRF-01 | `TRANSFER;<origen>;<destino>;<monto>;<c>` resta del origen y suma al destino → `200` `{"status":"recieved","operacionId":"OP-NNNN"}` | 8, 9, 11, 12, 487, 488, 490, 491 | confirmado |
-| CMD-TRF-02 | **(v2, vigente)** Límite por operación de **50000**, inclusivo: 49999 y 50000 pasan; 50001, 55000 y 59999 dan `422` `{"error":"E506","mensaje":"límite excedido"}` | 2347, 2352, 2357, 2362, 2367 | confirmado |
+| CMD-TRF-02 | **(v2, vigente)** Límite por operación de **50000**, inclusivo, **solo entre cuentas de titulares distintos**: 49999 y 50000 pasan; 50001, 55000 y 59999 dan `422` `{"error":"E506","mensaje":"límite excedido"}` | 2347, 2352, 2357, 2362, 2367 | confirmado |
+| CMD-TRF-09 | **(v2, cambio 3 del incidente)** Si origen y destino tienen **el mismo titular**, el límite no aplica: con saldo suficiente pasan 50001 y hasta 999999999 | 3114, 3115, 3129 | confirmado |
+| CMD-TRF-10 | El titular se compara **tal cual, distinguiendo mayúsculas**: `Ana` y `ANA` son titulares distintos y la transferencia da E506 | 3134 | probable |
+| CMD-TRF-11 | La excepción no salta las demás validaciones: mismo titular sin saldo da E507, no E506 | 2921, 3124 | confirmado |
 | CMD-TRF-02-v1 | **(v1, hasta 15:51)** El límite era 100000, inclusivo: 100000 pasaba; 100001, 105000, 110000, 119999 y 120000 daban E506 | 11, 366, 490, 340, 345, 350, 355, 10, 419, 489, 502 | confirmado |
 | CMD-TRF-03 | **(v2, vigente)** El límite no es acumulado: dos transferencias de 30000 seguidas pasan | 2372, 2373 | confirmado |
 | CMD-TRF-03-v1 | **(v1, hasta 15:51)** Tampoco era acumulado: dos de 60000, o una de 100000 y otra de 1, pasaban | 360, 361, 366, 367 | confirmado |
@@ -256,7 +259,7 @@ comando.
 ## 6. Cambios durante el día
 
 El proveedor desplegó una **versión 2** sin avisar qué cambió (ticket #FR-0153, abierto a las 15:30;
-el cambio real llegó más tarde). El ticket dice que **cambiaron 3 comportamientos**.
+el cambio real llegó más tarde). El ticket dice que **cambiaron 3 comportamientos**. Los tres están identificados (CAM-03, CAM-04 y CAM-05).
 
 **Cómo lo detectamos.** Un canario (`experimentos/canary.ts`) repetía 26 mensajes fijos cada 10
 minutos contra el original y los comparaba con una línea base. A las 16:01 reportó 9 respuestas
@@ -270,7 +273,7 @@ todas explicadas por los dos cambios de abajo (`analisis/06_cambios_v2_completa_
 | CAM-02 | El cambio ocurrió entre las 15:51 y las 16:01. El contador del header `X-Req` volvió a 1 en la primera llamada posterior, señal de que reiniciaron el proceso | 1793, 1794 | confirmado |
 | CAM-03 | **Cambio 1 — límite de TRANSFER: de 100000 a 50000**, inclusivo. 50000 pasa; 50001, 55000 y 59999 dan E506. Sigue siendo por operación, no acumulado (30000+30000 pasa) | 2347, 2352, 2357, 2362, 2367, 2372, 2373 | confirmado |
 | CAM-04 | **Cambio 2 — formato del saldo en CONSULTA: de entero a string con 2 decimales**, con el valor interno dividido entre 100 (40000 → `"400.00"`, 12345 → `"123.45"`, -800 → `"-8.00"`). El valor interno no cambió: los montos de DEPOSITO y TRANSFER se siguen dando en la unidad entera y el límite se evalúa sobre ella | 1825, 1828, 1832, 2237, 2377, 2381 | confirmado |
-| CAM-05 | **El tercer cambio anunciado no se encontró.** Las 451 llamadas de la v1 repetidas contra la v2 solo mostraron esos 2 cambios, así que el tercero está en un comportamiento que nunca le preguntamos a la v1. Zonas candidatas sin medir en v1: límite acumulado por encima de 60000, nombres repetidos en ALTA, reglas de sugerencia para comandos mal escritos y el comando `HALT` que revela la sugerencia de `HELP` | 1793-2381 | supuesto |
+| CAM-05 | **Cambio 3 — el límite de TRANSFER no aplica entre cuentas del mismo titular.** En v1 no hubo ninguna transferencia entre cuentas con el mismo nombre, así que no salió al repetir las 451 llamadas: apareció con secuencias aleatorias (id 2921, única diferencia en 248 líneas) y se confirmó con un experimento dirigido. Con el mismo titular y saldo suficiente pasan 50001 y 999999999; con titular distinto, E506 | 2921, 3114, 3120, 3129, 3134 | confirmado |
 | CAM-06 | Lo demás se mantuvo igual: autenticación, rutas, métodos, validación del mensaje y del control, códigos y textos de error, orden de evaluación, numeración de `AC-`/`OP-`, anulaciones y PING sin validar el valor del control | 1795-2246 | confirmado |
 
 ## 7. Riesgos

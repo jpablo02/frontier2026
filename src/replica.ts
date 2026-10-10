@@ -14,9 +14,10 @@ if (!TOKEN) {
 type Op =
   | { tipo: "DEPOSITO"; cuenta: string; monto: number; anulada: boolean }
   | { tipo: "TRANSFER"; origen: string; destino: string; monto: number; anulada: boolean };
-const estado = { cuentas: new Map<string, number>(), ops: new Map<string, Op>(), nCuentas: 0, nOps: 0 };
+const estado = { cuentas: new Map<string, number>(), titulares: new Map<string, string>(), ops: new Map<string, Op>(), nCuentas: 0, nOps: 0 };
 function reset() {
   estado.cuentas.clear();
+  estado.titulares.clear();
   estado.ops.clear();
   estado.nCuentas = 0;
   estado.nOps = 0;
@@ -147,7 +148,15 @@ const PASOS_COMANDO: Record<string, Paso[]> = {
     { codigo: "E304", status: 400, mensaje: "origen y destino iguales", chequeo: (c) => c.args[0] === c.args[1] },
     { codigo: "E401", status: 404, mensaje: "cuenta inexistente", chequeo: (c) => cuentaNo(c.args[0]) || cuentaNo(c.args[1]) },
     // Límite (E506) antes que saldo (E507) (id 419); cuenta inexistente antes que límite (id 423).
-    { codigo: "E506", status: 422, mensaje: "límite excedido", chequeo: (c) => monto(c.args[2]) > LIMITE_TRANSFER },
+    // v2: el límite NO aplica si origen y destino tienen el mismo titular, comparado tal cual
+    // (distingue mayúsculas): mismo titular con saldo pasa 50001 y hasta 999999999 (ids 3114, 3129);
+    // distinto titular da E506 (3120); "Ana" vs "ANA" son titulares distintos (3134). Descubierto
+    // con el id 2921, la única diferencia en 248 líneas aleatorias.
+    {
+      codigo: "E506", status: 422, mensaje: "límite excedido",
+      chequeo: (c) => monto(c.args[2]) > LIMITE_TRANSFER &&
+        estado.titulares.get(c.args[0]) !== estado.titulares.get(c.args[1]),
+    },
     { codigo: "E507", status: 422, mensaje: "saldo insuficiente", chequeo: (c) => estado.cuentas.get(c.args[0])! < monto(c.args[2]) },
   ],
   ANULA: [{ codigo: "E402", status: 404, mensaje: "operación inexistente", chequeo: (c) => !estado.ops.has(c.args[0]) }],
@@ -166,9 +175,10 @@ const nuevaOp = (op: Op) => { const id = `OP-${pad(++estado.nOps)}`; estado.ops.
 const EJECUTAR: Record<string, (c: Ctx) => Resp> = {
   PING: () => ({ status: 200, body: { pong: true } }),
   HALT: () => ({ status: 409, body: { error: "E520", mensaje: "operación destructiva: detiene el servicio; reenvía con confirmación" } }),
-  ALTA: () => {
+  ALTA: (c) => {
     const id = `AC-${pad(++estado.nCuentas)}`;
     estado.cuentas.set(id, 0);
+    estado.titulares.set(id, c.args[0]); // el titular importa para el límite (ver E506)
     return { status: 201, body: { cuentaId: id } };
   },
   CONSULTA: (c) => ({ status: 200, body: { cuenta_id: c.args[0], saldo: formatoSaldo(estado.cuentas.get(c.args[0])!) } }),
