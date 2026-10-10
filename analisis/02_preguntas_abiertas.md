@@ -55,3 +55,15 @@ la mayoría de las fallas deberían estar aquí. Ordenadas por impacto estimado.
 | Pregunta | Supuesto actual | Por qué importa |
 |---|---|---|
 | PING ignora el valor del control. ¿Ignora también el formato (`PING;XX`)? | Ignora el valor | Tests de un mensaje |
+
+## Estado al cierre de la exploración previa al incidente (14:55)
+
+| Sección | Estado | Dónde |
+|---|---|---|
+| 1. Límite de transferencia | **Respondida**: 100.000 por transferencia, no acumulado | `analisis/02_limites.md` |
+| 2. Montos | **Respondida**: hasta 10 dígitos (la réplica estaba en 9; corregido) | `analisis/02_limites.md` |
+| 3. Orden de errores dentro de un comando | **Respondida**: E303 → E304 → E401 → E506 → E507 | `analisis/04_orden_anula.md` |
+| 4. Anulaciones | **Respondida**: permiten saldo negativo; no consumen número | `analisis/04_orden_anula.md` |
+| 5. Numeración y formato de cuenta | **Respondida**: los errores no consumen número; la cuenta debe ir exacta | `analisis/02_limites.md`, `analisis/04_orden_anula.md` |
+| 6. Sugerencias y comando sugerido | **Abierta**: queda como supuesto en la réplica | — |
+| 7. PING con control mal formado | **Abierta**: queda como supuesto en la réplica | — |
