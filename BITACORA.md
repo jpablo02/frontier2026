@@ -29,7 +29,6 @@ como material de estudio.
 | ~12:35 | Pi rechazó el prompt de la tanda 2 por su filtro de seguridad, también tras agregarle contexto | No se buscó esquivar el filtro: el script lo escribió y ejecutó Claude Code |
 | ~12:45 | Tanda 2 ejecutada: 335 requests en total, todos registrados | Resultados en `analisis/01_entrada.md` |
 | ~12:50 | Un clasificador de seguridad cortó parte de dos respuestas de Claude Code | No se perdió trabajo: los archivos estaban guardados. Los resúmenes se enfocan en el comportamiento de la réplica |
-
 | ~13:15 | Pi construyó la réplica y el comparador; verificado por separado: 356/356 | Las reglas de error quedaron en una tabla ordenada para cambiarlas rápido |
 | ~13:30 | Un nuevo intento de escribir experimentos fue cortado por el clasificador; el archivo a medias se borró sin ejecutarse | Se decidió desplegar primero y medir los supuestos después |
 | ~13:40 | La prueba de Railway estaba vencida; se pagó el plan Hobby (US$5) | Un servidor que se duerme o pierde la memoria anularía el set oculto |
